@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "AST_NETWORK_SOCKET",
+      "path": "*brain.py",
+      "reason": "Authorized internal Ollama localhost API call"
+    },
+    {
+      "id": "AST_NETWORK_SOCKET",
+      "path": "*verify_agents.py",
+      "reason": "Authorized Ollama liveness check on 127.0.0.1"
+    },
+    {
+      "id": "AST_NETWORK_SOCKET",
+      "path": "*local_judge.py",
+      "reason": "Authorized local evaluation judge API call"
+    },
+    {
+      "id": "AST_COMMAND_INJECTION",
+      "path": "*heartbeat.py",
+      "reason": "Authorized internal background process monitor"
+    },
+    {
+      "id": "AST_CREDENTIAL_HARVESTING",
+      "path": "*compress.py",
+      "reason": "Authorized Anthropic API key detection for optional direct SDK compression"
+    },
+    {
+      "id": "PROMPT_ESCAPE",
+      "path": "*rules*",
+      "reason": "Documentation describing prompt injection guardrails and defense"
+    },
+    {
+      "id": "PROMPT_ESCAPE",
+      "path": "*docs*",
+      "reason": "Documentation describing security defense architectures"
+    },
+    {
+      "id": "PROMPT_ESCAPE",
+      "path": "*skills*",
+      "reason": "Documentation describing security defense in skills"
+    },
+    {
+      "id": "PROMPT_ESCAPE",
+      "path": "*archive*",
+      "reason": "Archived prompt history"
+    },
+    {
+      "id": "DESTRUCTIVE_ACTION",
+      "path": "*rules*",
+      "reason": "Documentation describing destructive actions to avoid"
+    },
+    {
+      "id": "DESTRUCTIVE_ACTION",
+      "path": "*docs*",
+      "reason": "Documentation describing destructive actions to avoid"
+    }
+  ],
+  "fingerprints": [
+    "0d613916832c67b198011afd88a6345645aab82fdf4868fec895ea9e21233fdf",
+    "2f415528dfe38c07107265f3ae18795cde7cd83e0a0d55a9f5c57343d1021c32",
+    "2fb7fe9b93d1238bd4214baf9f910be3b321c0a6ad59144a2326825d21bcec8c",
+    "3e6d77177f4e7003ad4fd9955b6b6781fb5a8110d12bd13e47813bc5aeee97b6",
+    "4698e4ab048ca7b747c5d58c1b648cc2bf8d09a07cfe71444517027bacb4d090",
+    "55fd62f949b1c0163e872f55ef023fe0df837ed14e56efc81f75cd819824d700",
+    "624f13e505fc38e57be175af68516c880c8711678e49cc38eced81fa0d9a6aed",
+    "71aab48ca7e0b9b4445a9a7a7f8347920e1dfc39c959889d6b82b922276ce545",
+    "728f83c1a7f36d38a2df89d965c9980e41e574c93b891572326533c817f92b8c",
+    "78ebddfec2a5fd8e6fce379dad135002a032bbadf47940aaae5f59cebecb7c49",
+    "7d6d078f6140580240bb1d598ff0cd3198cf11ceb5592db28cdf9b6d44c2bc88",
+    "827c38bba758132599d0f6c7206111eb2b07d353149c59dbf506911117f3bec7",
+    "8bd191a58665a6174eae9adcf950bba89036882a877870f3aa4abbaf1b4c9d9f",
+    "8eaadff1852daa2eb22468e93152c7e12c3f3791f4597a2d3030066cf1972230",
+    "92a49be86230c277a470e9242ee0f362fd32505404addd677d8be8562db062ef",
+    "a370779f46b666f307664995ce080f34a445408d3d380658fead7f32038ef243",
+    "aa26b50adc21e8eac3921321849695203b0dcf74e9b1d88e22df6065e38ec60b",
+    "c08495df650b3ba2c5917707e06be7430a06366bf34b62ccea54ce8b7f9f12b2",
+    "cfe0bee13f8ae3e30fd7b5a8c768373ffa60fc7dae8a915792325f6ab4234851",
+    "d63724a89b1762e4b0822191437c0d9872b920971afb599a7e133de26a5f1202",
+    "d75ba28723f4f5ac66790695ffee7df1ba3e58e80bd513f522283794b35a66f7",
+    "da363c3d25274d3fb7e206127afeaf34873ff5f595d2508b6d40a678d363b272",
+    "dd1eefac76ac2d501bb63d2ab6e7c695cb27dd37e8ce42f76a275f190bece8ce",
+    "e3c3aca553f0b2f7f8989fae6bcbc6e239459deb7c1555ef137a4123a727d902",
+    "eba347dfc280372d876b089cfdf75bd6da1a7accb4e9b595c502fe1b7f4e887f"
+  ]
+}
