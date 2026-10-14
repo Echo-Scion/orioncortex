@@ -114,7 +114,7 @@ INSECURE_RULES = [
         "cwe": "CWE-89",
         "severity": "CRITICAL",
         "description": "SQL injection via raw string interpolation",
-        "pattern": re.compile(r'(?i)\b(SELECT|INSERT|UPDATE|DELETE)\b.*?\bWHERE\b.*?f[\'"].*?\{.*?\}')
+        "pattern": re.compile(r'(?i)(?:f[\'"].*?\b(SELECT|INSERT|UPDATE|DELETE)\b.*?\bWHERE\b.*?\{.*?\}|\b(SELECT|INSERT|UPDATE|DELETE)\b.*?\bWHERE\b.*?f?[\'"].*?\{.*?\})')
     },
     {
         "cwe": "CWE-22",

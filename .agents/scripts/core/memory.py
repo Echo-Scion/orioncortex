@@ -15,6 +15,8 @@ import hashlib
 import re
 import time
 import glob
+import math
+import struct
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple, Set
 
@@ -39,7 +41,228 @@ DB_PATH = os.path.join(ORION_DIR, 'orion.db')
 CORE_MEM_PATH = os.path.join(ORION_DIR, 'working', 'core_memory.json')
 
 
+# === GRAPH-RAG LOUVAIN MODULARITY CLUSTERING (Repo 18: GraphRAG) ===
+
+def louvain_clustering(
+    nodes: List[str],
+    edges: List[Tuple[str, str, float]]
+) -> Tuple[Dict[str, int], float]:
+    """
+    Pure-Python Louvain modularity clustering optimizing:
+    Q = 1/(2m) * sum_ij [ A_ij - (k_i * k_j)/(2m) ] * delta(c_i, c_j)
+    Returns (node_to_community_map, modularity_q).
+    """
+    if not nodes:
+        return {}, 0.0
+
+    adj: Dict[str, Dict[str, float]] = {n: {} for n in nodes}
+    k: Dict[str, float] = {n: 0.0 for n in nodes}
+    total_w = 0.0
+
+    for u, v, w in edges:
+        w_val = float(w)
+        if u in adj and v in adj:
+            adj[u][v] = adj[u].get(v, 0.0) + w_val
+            adj[v][u] = adj[v].get(u, 0.0) + w_val
+            k[u] += w_val
+            k[v] += w_val
+            total_w += w_val
+
+    m = total_w
+    two_m = 2.0 * m
+
+    if two_m <= 0.0:
+        return {n: i for i, n in enumerate(nodes)}, 0.0
+
+    communities: Dict[str, int] = {n: i for i, n in enumerate(nodes)}
+    community_tot: Dict[int, float] = {i: k[n] for i, n in enumerate(nodes)}
+
+    improved = True
+    passes = 0
+    max_passes = 25
+
+    while improved and passes < max_passes:
+        improved = False
+        passes += 1
+        for node in nodes:
+            curr_c = communities[node]
+            ki = k[node]
+            community_tot[curr_c] -= ki
+
+            neigh_weights: Dict[int, float] = {}
+            for nbr, w in adj[node].items():
+                c = communities[nbr]
+                neigh_weights[c] = neigh_weights.get(c, 0.0) + w
+
+            best_c = curr_c
+            best_gain = 0.0
+
+            for c, ki_in in neigh_weights.items():
+                tot = community_tot.get(c, 0.0)
+                gain = 2.0 * ki_in - (2.0 * tot * ki) / two_m
+                if gain > best_gain:
+                    best_gain = gain
+                    best_c = c
+
+            communities[node] = best_c
+            community_tot[best_c] = community_tot.get(best_c, 0.0) + ki
+            if best_c != curr_c:
+                improved = True
+
+    q = 0.0
+    for u in nodes:
+        for v in nodes:
+            if communities[u] == communities[v]:
+                a_uv = adj[u].get(v, 0.0)
+                expected = (k[u] * k[v]) / two_m
+                q += a_uv - expected
+    q = q / two_m if two_m > 0 else 0.0
+
+    unique_comms = sorted(list(set(communities.values())))
+    comm_remap = {old: new for new, old in enumerate(unique_comms)}
+    clean_partition = {n: comm_remap[communities[n]] for n in nodes}
+
+    return clean_partition, round(q, 4)
+
+
+# === TIME-DECAYED MEMORY RETRIEVAL (Repo 19: LangMem) ===
+
+HALF_LIFE_DAYS = 14.0
+LAMBDA_DECAY = math.log(2) / (HALF_LIFE_DAYS * 86400.0)
+
+def calculate_retrieval_score(base_relevance: float, created_timestamp: float) -> float:
+    """Computes time-decayed retrieval score S = S_base * e^(-lambda * dt) (LangMem distillation)."""
+    age_seconds = max(0.0, time.time() - created_timestamp)
+    decay_factor = math.exp(-LAMBDA_DECAY * age_seconds)
+    return base_relevance * decay_factor
+
+
+# === FLOAT32 VECTOR BLOB SERIALIZATION & COSINE SIMILARITY (Repo 20: Letta) ===
+
+def pack_vector(vec: List[float]) -> bytes:
+    """Packs float32 list into SQLite binary BLOB using standard struct packing."""
+    return struct.pack(f"{len(vec)}f", *vec)
+
+def unpack_vector(blob: bytes) -> List[float]:
+    """Unpacks SQLite binary BLOB into float32 list."""
+    dim = len(blob) // 4
+    return list(struct.unpack(f"{dim}f", blob))
+
+def cosine_similarity(blob_or_vec_a: Any, vec_b: List[float]) -> float:
+    """Calculates dot-product cosine similarity between vector BLOB / list and query vector."""
+    if isinstance(blob_or_vec_a, bytes):
+        vec_a = unpack_vector(blob_or_vec_a)
+    else:
+        vec_a = blob_or_vec_a
+    dot = sum(a * b for a, b in zip(vec_a, vec_b))
+    norm_a = math.sqrt(sum(a * a for a in vec_a))
+    norm_b = math.sqrt(sum(b * b for b in vec_b))
+    return dot / (norm_a * norm_b) if norm_a and norm_b else 0.0
+
+
+# === MULTI-LAYER MEMORY & AUDIT LEDGER (Repo 22: Mem0) ===
+
+class MultiLayerMemoryManager:
+    """
+    Multi-layer long-term memory engine with history audit (Mem0 distillation).
+    Partitions memory into 'user', 'session', and 'persona' layers.
+    """
+    def __init__(self, db_path: str = DB_PATH):
+        self.db_path = db_path
+        self._init_db()
+
+    def _get_connection(self) -> sqlite3.Connection:
+        if self.db_path != ":memory:":
+            os.makedirs(os.path.dirname(os.path.abspath(self.db_path)), exist_ok=True)
+        conn = sqlite3.connect(self.db_path)
+        conn.execute('PRAGMA busy_timeout=5000;')
+        return conn
+
+    def _init_db(self) -> None:
+        conn = self._get_connection()
+        with conn:
+            conn.executescript("""
+            CREATE TABLE IF NOT EXISTS multi_layer_memory (
+                id TEXT PRIMARY KEY,
+                layer TEXT CHECK(layer IN ('user', 'session', 'persona')),
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                confidence REAL DEFAULT 1.0,
+                version INTEGER DEFAULT 1,
+                updated_at REAL NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS memory_mutation_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                memory_id TEXT NOT NULL,
+                action TEXT CHECK(action IN ('CREATE', 'UPDATE', 'DELETE', 'RESOLVE_CONFLICT')),
+                old_value TEXT,
+                new_value TEXT,
+                timestamp REAL NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_mem_layer ON multi_layer_memory(layer, key);
+            CREATE INDEX IF NOT EXISTS idx_mem_hist ON memory_mutation_history(memory_id);
+            """)
+        conn.close()
+
+    def set_fact(self, layer: str, key: str, value: str, confidence: float = 1.0) -> None:
+        mem_id = f"{layer}:{key}"
+        now = time.time()
+        conn = self._get_connection()
+        with conn:
+            cur = conn.cursor()
+            cur.execute("SELECT value, version FROM multi_layer_memory WHERE id = ?", (mem_id,))
+            row = cur.fetchone()
+            if row:
+                old_val, ver = row[0], row[1]
+                cur.execute("""
+                UPDATE multi_layer_memory 
+                SET value = ?, confidence = ?, version = ?, updated_at = ?
+                WHERE id = ?
+                """, (value, confidence, ver + 1, now, mem_id))
+                cur.execute("""
+                INSERT INTO memory_mutation_history (memory_id, action, old_value, new_value, timestamp)
+                VALUES (?, 'UPDATE', ?, ?, ?)
+                """, (mem_id, old_val, value, now))
+            else:
+                cur.execute("""
+                INSERT INTO multi_layer_memory (id, layer, key, value, confidence, version, updated_at)
+                VALUES (?, ?, ?, ?, ?, 1, ?)
+                """, (mem_id, layer, key, value, confidence, now))
+                cur.execute("""
+                INSERT INTO memory_mutation_history (memory_id, action, old_value, new_value, timestamp)
+                VALUES (?, 'CREATE', NULL, ?, ?)
+                """, (mem_id, value, now))
+        conn.close()
+
+    def get_facts(self, layer: str) -> Dict[str, str]:
+        conn = self._get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT key, value FROM multi_layer_memory WHERE layer = ?", (layer,))
+        facts = {r[0]: r[1] for r in cur.fetchall()}
+        conn.close()
+        return facts
+
+    def get_history(self, memory_id: str) -> List[Dict[str, Any]]:
+        conn = self._get_connection()
+        cur = conn.cursor()
+        cur.execute("""
+        SELECT action, old_value, new_value, timestamp 
+        FROM memory_mutation_history 
+        WHERE memory_id = ? 
+        ORDER BY id ASC
+        """, (memory_id,))
+        rows = [
+            {"action": r[0], "old_value": r[1], "new_value": r[2], "timestamp": r[3]}
+            for r in cur.fetchall()
+        ]
+        conn.close()
+        return rows
+
+
 class CoreMemoryManager:
+
     """
     Virtual Core Memory (VirtualMemoryHierarchy pattern).
     Holds persistent human profile and agent persona invariants in active context.
@@ -113,9 +336,21 @@ class ArchivalMemoryManager:
         self.db_path = db_path
 
     def _get_connection(self) -> sqlite3.Connection:
+        if self.db_path != ":memory:":
+            os.makedirs(os.path.dirname(os.path.abspath(self.db_path)), exist_ok=True)
         conn = sqlite3.connect(self.db_path)
         conn.execute('PRAGMA busy_timeout=5000;')
         return conn
+
+    def _init_vectors(self, conn: sqlite3.Connection) -> None:
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS archival_vectors (
+            id TEXT PRIMARY KEY,
+            content TEXT,
+            embedding BLOB,
+            created_at REAL
+        );
+        """)
 
     def insert(self, path: str, content: str, category: str = "archival", pillar: str = "core") -> bool:
         if not os.path.exists(self.db_path):
@@ -137,6 +372,44 @@ class ArchivalMemoryManager:
         except Exception as e:
             _log_telemetry(e, 'memory.py:ArchivalMemoryManager.insert')
             return False
+
+    def insert_vector(self, item_id: str, content: str, embedding: List[float]) -> bool:
+        """Stores float32 embedding vector as SQLite BLOB (Letta distillation)."""
+        try:
+            blob = pack_vector(embedding)
+            conn = self._get_connection()
+            with conn:
+                self._init_vectors(conn)
+                conn.execute(
+                    "INSERT OR REPLACE INTO archival_vectors (id, content, embedding, created_at) VALUES (?, ?, ?, ?)",
+                    (item_id, content, blob, time.time())
+                )
+            conn.close()
+            return True
+        except Exception as e:
+            _log_telemetry(e, 'memory.py:ArchivalMemoryManager.insert_vector')
+            return False
+
+    def search_vectors(self, query_vec: List[float], top_k: int = 5) -> List[Tuple[str, str, float]]:
+        """Performs in-memory cosine similarity search across float32 BLOB vectors."""
+        try:
+            conn = self._get_connection()
+            self._init_vectors(conn)
+            cur = conn.cursor()
+            cur.execute("SELECT id, content, embedding FROM archival_vectors")
+            rows = cur.fetchall()
+            conn.close()
+
+            scored = []
+            for item_id, content, blob in rows:
+                if blob:
+                    sim = cosine_similarity(blob, query_vec)
+                    scored.append((item_id, content, sim))
+            scored.sort(key=lambda x: x[2], reverse=True)
+            return scored[:top_k]
+        except Exception as e:
+            _log_telemetry(e, 'memory.py:ArchivalMemoryManager.search_vectors')
+            return []
 
     def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         if not os.path.exists(self.db_path):
@@ -185,12 +458,73 @@ class RecallMemoryManager:
     def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
 
+    def _get_connection(self) -> sqlite3.Connection:
+        if self.db_path != ":memory:":
+            os.makedirs(os.path.dirname(os.path.abspath(self.db_path)), exist_ok=True)
+        conn = sqlite3.connect(self.db_path)
+        conn.execute('PRAGMA busy_timeout=5000;')
+        return conn
+
+    def _init_turns(self, conn: sqlite3.Connection) -> None:
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS recall_turns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            tool_calls TEXT,
+            created_at REAL NOT NULL
+        );
+        """)
+
+    def record_turn(self, role: str, content: str, tool_calls: Optional[str] = None) -> bool:
+        """Records conversational interaction turn into rolling recall memory."""
+        try:
+            conn = self._get_connection()
+            with conn:
+                self._init_turns(conn)
+                conn.execute(
+                    "INSERT INTO recall_turns (role, content, tool_calls, created_at) VALUES (?, ?, ?, ?)",
+                    (role, content, tool_calls, time.time())
+                )
+            conn.close()
+            return True
+        except Exception as e:
+            _log_telemetry(e, 'memory.py:RecallMemoryManager.record_turn')
+            return False
+
+    def get_recent_turns(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Retrieves recent conversation turns ordered by recency descending."""
+        try:
+            if not os.path.exists(self.db_path) and self.db_path != ":memory:":
+                return []
+            conn = self._get_connection()
+            self._init_turns(conn)
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT id, role, content, tool_calls, created_at FROM recall_turns ORDER BY id DESC LIMIT ?",
+                (limit,)
+            )
+            rows = [
+                {
+                    "id": r[0],
+                    "role": r[1],
+                    "content": r[2],
+                    "tool_calls": r[3],
+                    "created_at": r[4]
+                }
+                for r in cur.fetchall()
+            ]
+            conn.close()
+            return rows
+        except Exception as e:
+            _log_telemetry(e, 'memory.py:RecallMemoryManager.get_recent_turns')
+            return []
+
     def record_event(self, event_type: str, exit_code: int = 0, context_load: int = 0) -> bool:
-        if not os.path.exists(self.db_path):
+        if not os.path.exists(self.db_path) and self.db_path != ":memory:":
             return False
         try:
-            conn = sqlite3.connect(self.db_path)
-            conn.execute('PRAGMA busy_timeout=5000;')
+            conn = self._get_connection()
             with conn:
                 conn.execute(
                     "INSERT INTO telemetry (timestamp, event_type, exit_code, context_load) VALUES (datetime('now'), ?, ?, ?)",
@@ -203,12 +537,11 @@ class RecallMemoryManager:
             return False
 
     def get_recent(self, limit: int = 10) -> List[Dict[str, Any]]:
-        if not os.path.exists(self.db_path):
+        if not os.path.exists(self.db_path) and self.db_path != ":memory:":
             return []
         results = []
         try:
-            conn = sqlite3.connect(self.db_path)
-            conn.execute('PRAGMA busy_timeout=5000;')
+            conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT id, timestamp, event_type, exit_code, context_load FROM telemetry ORDER BY id DESC LIMIT ?",
@@ -256,34 +589,19 @@ class GraphCommunityClusterer:
         if not nodes:
             return []
 
-        # Build undirected graph adjacency
-        adj: Dict[str, Set[str]] = {nid: set() for nid in nodes}
-        for s, t, _, _ in edges:
-            if s in adj and t in adj:
-                adj[s].add(t)
-                adj[t].add(s)
-
-        # Label Propagation Community Detection (Pure Python)
-        labels: Dict[str, str] = {nid: nid for nid in nodes}
-        iterations = 5
-        for _ in range(iterations):
-            for nid in nodes:
-                neighbors = adj[nid]
-                if not neighbors:
-                    continue
-                # Count neighbor labels
-                label_counts: Dict[str, int] = {}
-                for n in neighbors:
-                    lbl = labels[n]
-                    label_counts[lbl] = label_counts.get(lbl, 0) + 1
-                # Find dominant label
-                best_label = max(label_counts.items(), key=lambda x: (x[1], x[0]))[0]
-                labels[nid] = best_label
+        # Louvain Modularity Clustering (Pure Python)
+        node_ids = list(nodes.keys())
+        louvain_edges = [
+            (str(s), str(t), float(conf) if conf is not None else 1.0)
+            for s, t, _, conf in edges
+            if s in nodes and t in nodes
+        ]
+        partition, modularity_q = louvain_clustering(node_ids, louvain_edges)
 
         # Group by community label
-        groups: Dict[str, List[str]] = {}
-        for nid, lbl in labels.items():
-            groups.setdefault(lbl, []).append(nid)
+        groups: Dict[int, List[str]] = {}
+        for nid, cid in partition.items():
+            groups.setdefault(cid, []).append(nid)
 
         # Sort communities by size descending
         sorted_groups = sorted(groups.values(), key=len, reverse=True)
@@ -301,6 +619,7 @@ class GraphCommunityClusterer:
                 "size": len(group_nodes),
                 "dominant_type": dominant_type,
                 "top_entities": members[:8],
+                "modularity_q": modularity_q,
                 "summary": f"Cluster of {len(group_nodes)} {dominant_type} nodes centered around {members[0] if members else 'unknown'}"
             })
 
