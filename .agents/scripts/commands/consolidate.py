@@ -20,6 +20,12 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
     except AttributeError:
         pass
 
+def _log_telemetry(err: Exception, context: str = "") -> None:
+    """Non-fatal telemetry catch for degraded operations."""
+    if os.environ.get("ORION_DEBUG"):
+        msg = f": {err}" if err else ""
+        sys.stderr.write(f"[ORION_TELEMETRY] Non-fatal catch in {context}{msg}\n")
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..'))
 WORKSPACE_DIR = os.path.abspath(os.path.join(BASE_DIR, '..'))
@@ -160,6 +166,121 @@ def parse_transcript_observations(transcript_path=None):
     return observations
 
 
+def parse_harness_ledgers(skills_dir=None, harness_intents_dir=None):
+    """
+    Scans Sovereign Harness staged intents, skill sidecars, and mutation ledgers.
+    Aggregates pending autonomous skill proposals and active agent-authored skills.
+    """
+    target_skills_dir = skills_dir or os.path.join(BASE_DIR, 'skills')
+    target_intents_dir = harness_intents_dir or os.path.join(WORKSPACE_DIR, '.orion', 'harness', 'intents')
+
+    result = {
+        "staged_intents": [],
+        "agent_skills": [],
+        "ledger_mutations": []
+    }
+
+    # 1. Scan staged intents
+    if os.path.exists(target_intents_dir):
+        for intent_file in sorted(glob.glob(os.path.join(target_intents_dir, "*.json"))):
+            try:
+                with open(intent_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                result["staged_intents"].append({
+                    "id": data.get("id", os.path.basename(intent_file).replace(".json", "")),
+                    "name": data.get("name", "unknown"),
+                    "action": data.get("action", "create"),
+                    "reason": data.get("reason", ""),
+                    "evidence": data.get("evidence", ""),
+                    "level": data.get("level", "project")
+                })
+            except Exception as e:
+                print(f"[WARN] Failed to read harness intent {intent_file}: {e}")
+
+    # 2. Scan skill directories for sidecars and ledgers
+    if os.path.exists(target_skills_dir):
+        for item in sorted(os.listdir(target_skills_dir)):
+            s_dir = os.path.join(target_skills_dir, item)
+            if not os.path.isdir(s_dir):
+                continue
+            sidecar_path = os.path.join(s_dir, ".sidecar.json")
+            ledger_path = os.path.join(s_dir, ".ledger.jsonl")
+
+            sidecar_info = {}
+            if os.path.exists(sidecar_path):
+                try:
+                    with open(sidecar_path, "r", encoding="utf-8") as f:
+                        sidecar_info = json.load(f)
+                except Exception as _e:
+                    _log_telemetry(_e, f"consolidate:sidecar:{item}")
+
+            ledger_entries = []
+            if os.path.exists(ledger_path):
+                try:
+                    with open(ledger_path, "r", encoding="utf-8") as f:
+                        for line in f:
+                            l_str = line.strip()
+                            if l_str:
+                                try:
+                                    entry = json.loads(l_str)
+                                    ledger_entries.append(entry)
+                                    result["ledger_mutations"].append({
+                                        "skill": item,
+                                        "action": entry.get("action", "unknown"),
+                                        "reason": entry.get("reason", ""),
+                                        "level": entry.get("level", "project")
+                                    })
+                                except Exception as _e:
+                                    _log_telemetry(_e, f"consolidate:ledger_line:{item}")
+                except Exception as _e:
+                    _log_telemetry(_e, f"consolidate:ledger:{item}")
+
+
+            if sidecar_info or ledger_entries:
+                result["agent_skills"].append({
+                    "name": item,
+                    "created_by": sidecar_info.get("created_by", "agent"),
+                    "layer": sidecar_info.get("layer", "project"),
+                    "use": sidecar_info.get("use", 0),
+                    "view": sidecar_info.get("view", 0),
+                    "patch": sidecar_info.get("patch", 0),
+                    "entries_count": len(ledger_entries)
+                })
+
+    return result
+
+
+def format_harness_summary(harness_data):
+    """Renders structured markdown summary for autonomous skill evolution."""
+    staged = harness_data.get("staged_intents", [])
+    agent_skills = harness_data.get("agent_skills", [])
+    mutations = harness_data.get("ledger_mutations", [])
+
+    if not staged and not agent_skills and not mutations:
+        return "- _(no active harness intents or agent-authored skill mutations)_"
+
+    sections = []
+    if staged:
+        lines = ["### Staged Skill Proposals (Awaiting Promotion)"]
+        for st in staged:
+            lines.append(f"- **`{st['name']}`** [Intent `{st['id']}`, action: `{st['action']}`, level: `{st['level']}`]: {st['reason']}")
+        sections.append("\n".join(lines))
+
+    if agent_skills:
+        lines = ["### Agent-Authored Skills & Telemetry"]
+        for sk in agent_skills:
+            lines.append(f"- **`{sk['name']}`** (layer: `{sk['layer']}`, creator: `{sk['created_by']}`, uses: {sk['use']}, views: {sk['view']}, patches: {sk['patch']})")
+        sections.append("\n".join(lines))
+
+    if mutations:
+        lines = ["### Recent Skill Ledger Mutations"]
+        for m in mutations[-5:]:
+            lines.append(f"- `[{m['action']}]` **`{m['skill']}`**: {m['reason']}")
+        sections.append("\n".join(lines))
+
+    return "\n\n".join(sections)
+
+
 def consolidate_session(transcript_path=None):
     """Generate a session pulse from session history, handoff, and episodic transcript observations."""
     ensure_dirs()
@@ -185,6 +306,10 @@ def consolidate_session(transcript_path=None):
     # Parse episodic transcript observations
     obs = parse_transcript_observations(transcript_path)
     
+    # Parse harness ledgers and staged intents
+    harness_data = parse_harness_ledgers()
+    harness_section = format_harness_summary(harness_data)
+
     # Extract key patterns from session history
     history_decisions = [l.strip() for l in session_content.split('\n') 
                          if any(kw in l.lower() for kw in ['decided', 'chose', 'picked', 'selected', 'approved'])]
@@ -263,6 +388,9 @@ def consolidate_session(transcript_path=None):
 ## Active Learnings
 {chr(10).join(learnings_content.split(chr(10))[:10]) if learnings_content else '- _(no learnings yet)_'}
 
+## Autonomous Skill Evolution (Harness Ledgers)
+{harness_section}
+
 ---
 _Generated by Temporal Pulse Engine at {datetime.now().isoformat()}_
 """
@@ -271,6 +399,20 @@ _Generated by Temporal Pulse Engine at {datetime.now().isoformat()}_
         f.write(pulse)
     
     print(f"[PULSE] Session pulse generated: {output_path}")
+
+    # Append autonomous skill mutations to session_history.md if mutations or staged intents occurred
+    if harness_data.get("staged_intents") or harness_data.get("ledger_mutations"):
+        try:
+            harness_log_lines = []
+            for st in harness_data["staged_intents"]:
+                harness_log_lines.append(f"- [feature]: Staged autonomous skill intent `{st['name']}` ({st['action']}): {st['reason']}")
+            for mut in harness_data["ledger_mutations"][-3:]:
+                harness_log_lines.append(f"- [refactor]: Harness ledger mutation `{mut['skill']}` ({mut['action']}): {mut['reason']}")
+            if harness_log_lines and os.path.exists(SESSION_HISTORY):
+                with open(SESSION_HISTORY, "a", encoding="utf-8") as f:
+                    f.write(f"\n## Harness Skill Evolution — {timestamp}\n" + "\n".join(harness_log_lines) + "\n")
+        except Exception as e:
+            print(f"[WARN] Failed to append harness entry to session history: {e}")
     
     # Check if we should trigger a milestone (e.g. 5 unprocessed sessions)
     unprocessed_sessions = glob.glob(os.path.join(SESSION_DIR, 'session_*.md'))

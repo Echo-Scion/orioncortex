@@ -30,7 +30,7 @@ The boot sequence adapts to task complexity. Do NOT run the full sequence for si
 1. Perform **Internal Routing Analysis** against the JIT table in §4. If a match is found, load the target file (`view_file`, `Read`, or `read_file`) IMMEDIATELY in your first turn.
 
 ### For STANDARD and PREMIUM tasks (skip for BUDGET):
-2. If `.orion/` directory exists in the project, read `.orion/working/context.json` (the Omni-Buffer is updated automatically via Antigravity hooks).
+2. If `.orion/` directory exists in the project, read `.orion/working/context.json` (the Omni-Buffer is updated automatically via Antigravity hooks, containing `harness_skill_index` and `harness_lifecycle`).
 3. If `context.json` contains `drift_warnings`, read the listed files before making code modifications.
 
 ### For PREMIUM tasks only:
@@ -94,7 +94,7 @@ DO NOT rely on your internal LLM memory for how to execute these tasks.
 | **End-to-End Feature Creation (App Builder)** | `.agents/skills/app-lifecycle/references/app-builder.md` |
 | **Full Lifecycle Pipeline, State Machine** | `.agents/skills/app-lifecycle/SKILL.md` |
 | **Feature Deprecation, Sunset Code, Dead Code Purge** | `.agents/skills/app-lifecycle/references/feature-sunset.md` |
-| **Agent Self-Learning, Reflection, Pattern Synthesis** | `.agents/skills/self-evolve/SKILL.md` |
+| **Agent Self-Learning, Reflection, Pattern Synthesis, Harness, Autoharness, /learn** | `.agents/skills/self-evolve/SKILL.md` |
 | **Agent Identity, Onboarding, Personality, Bootstrap** | `context/AGENT_IDENTITY.md` |
 | **Temporal Pulse, Daily Summary, Weekly Synthesis** | `.agents/skills/self-evolve/references/temporal-pulse.md` |
 | **Worker Delegation, Sub-agent, Task Splitting** | `.agents/skills/worker-delegate/SKILL.md` |

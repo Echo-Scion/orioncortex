@@ -23,6 +23,28 @@ if hasattr(sys.stdout, 'reconfigure'):
     except Exception as _e:
         _log_telemetry(_e, 'scanner.py:reconfigure')
 
+try:
+    from core.scip import (
+        ScopeNode,
+        ScopeResolver,
+        SymbolRole,
+        format_scip_symbol,
+        parse_scip_symbol,
+        ScipIndex
+    )
+except ImportError:
+    try:
+        from scip import (
+            ScopeNode,
+            ScopeResolver,
+            SymbolRole,
+            format_scip_symbol,
+            parse_scip_symbol,
+            ScipIndex
+        )
+    except Exception as _e:
+        _log_telemetry(_e, 'scanner.py:scip_import')
+
 
 # === AUDIT TARGETS DISCOVERY ===
 

@@ -70,6 +70,7 @@ CMD_MAP = {
     "contrast": ["..", "evals", "audit_aesthetics.py"],
     "pack": ["utils", "packer.py"],
     "packer": ["utils", "packer.py"],
+    "digest": ["utils", "packer.py"],
     "mcp": ["core", "mcp_client.py"],
     "assert": ["..", "evals", "assertion_engine.py"],
     "bun": ["core", "bun_runtime.py"],
@@ -81,8 +82,21 @@ CMD_MAP = {
     "trace": ["core", "telemetry.py"],
     "aci": ["core", "aci.py"],
     "delegate": ["core", "delegation.py"],
-    "delegation": ["core", "delegation.py"]
+    "delegation": ["core", "delegation.py"],
+    "sandbox": ["core", "sandbox.py"],
+    "event_stream": ["core", "event_stream.py"],
+    "events": ["core", "event_stream.py"],
+    "signatures": ["core", "signatures.py"],
+    "compile_prompt": ["core", "signatures.py"],
+    "harness": ["core", "harness", "engine.py"],
+    "sovereign_harness": ["core", "harness", "engine.py"],
+    "skills": ["core", "skill_library.py"],
+    "compile_ast": ["core", "semgrep_compiler.py"],
+    "semgrep": ["core", "semgrep_compiler.py"],
+    "scip": ["core", "scip.py"]
 }
+
+
 
 def print_help():
     print("========================================")

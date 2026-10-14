@@ -36,7 +36,32 @@ When the agent encounters unresolved contradictions:
 - Losing a contradiction: `confidence = max(confidence * 0.5, 0.1)`
 - Edges with `confidence < 0.3` are candidates for pruning during compression
 
+## The Epistemic Evidence Quad (Clean-Room Standard)
+Distilled from Repo 54 (`rea`). Formalizes 4 distinct epistemic confidence tiers to govern reasoning, forensic decomposition, and contradiction resolution:
+
+1. **`OBSERVATION` (Tier 1 - Empirical Fact)**:
+   - Verbatim source code citations, line numbers, terminal stdout/stderr logs, exact exit codes, cryptographic hashes, and uninterpreted raw outputs.
+   - Strictly objective; zero synthesis or extrapolation allowed.
+
+2. **`DERIVATION` (Tier 2 - Deductive Proof)**:
+   - Direct mathematical calculations, algorithmic deductions, formal AST proofs, and deterministic transformations derived strictly from verified Tier 1 observations.
+
+3. **`INFERENCE` (Tier 3 - Inductive Hypothesis)**:
+   - Probabilistic assumptions, speculative conclusions, architectural extrapolation, or model-generated assessments.
+   - MUST be explicitly tagged with `[HYPOTHESIS]` until verified by empirical Tier 1 test execution or AST proof.
+
+4. **`UNKNOWN` (Tier 4 - Bounded Gaps)**:
+   - Explicitly bounded gaps, missing telemetry, unverified external dependencies, or uninspected binary artifacts.
+   - Must remain open questions rather than being silently filled with assumed defaults.
+
+### Anti-Conflation Gate
+- **Strict Prohibition**: Prohibits merging raw observations and predictive inferences into a single finding.
+- Every architectural claim or triage report MUST segregate empirical `OBSERVATION` from predictive `INFERENCE`.
+- If an unverified inference is asserted as an observation, it is flagged as a Hallucinatory Conflation and rejected by the sentinel gate.
+
 ## Anti-Patterns
 - ❌ Never silently overwrite an existing edge with contradictory data
 - ❌ Never delete edges without recording the contradiction resolution
 - ❌ Never resolve contradictions without reading both source files first
+- ❌ Never assert an `INFERENCE` as an `OBSERVATION` (violates Anti-Conflation Gate)
+

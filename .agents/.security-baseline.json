@@ -27,6 +27,16 @@
       "reason": "Authorized Anthropic API key detection for optional direct SDK compression"
     },
     {
+      "id": "AST_DANGEROUS_CALL",
+      "path": "*skill_library.py",
+      "reason": "Authorized dynamic execution of registered skills in sovereign skill library"
+    },
+    {
+      "id": "AST_SILENT_EXCEPTION_SWALLOW",
+      "path": "*harness*",
+      "reason": "Non-fatal fallback operations in experimental test harness"
+    },
+    {
       "id": "PROMPT_ESCAPE",
       "path": "*rules*",
       "reason": "Documentation describing prompt injection guardrails and defense"

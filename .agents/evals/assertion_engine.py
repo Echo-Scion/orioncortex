@@ -61,10 +61,36 @@ def _jaccard_similarity(s1: str, s2: str) -> float:
     return intersection / union if union > 0 else 0.0
 
 
+def levenshtein_distance(s1: str, s2: str) -> int:
+    """Computes Wagner-Fischer Levenshtein distance between two strings in O(min(m, n)) space."""
+    if s1 == s2:
+        return 0
+    if not s1:
+        return len(s2)
+    if not s2:
+        return len(s1)
+
+    if len(s1) < len(s2):
+        s1, s2 = s2, s1
+
+    prev = list(range(len(s2) + 1))
+    for i, c1 in enumerate(s1):
+        curr = [i + 1] * (len(s2) + 1)
+        for j, c2 in enumerate(s2):
+            cost = 0 if c1 == c2 else 1
+            curr[j + 1] = min(
+                curr[j] + 1,       # insertion
+                prev[j + 1] + 1,   # deletion
+                prev[j] + cost     # substitution
+            )
+        prev = curr
+    return prev[len(s2)]
+
+
 def validate_json_schema_subset(data: Any, schema: Dict[str, Any]) -> Tuple[bool, str]:
     """
     Validates data against a lightweight JSON-schema subset in pure Python stdlib.
-    Supports: type, required, properties, minimum, maximum, items.
+    Supports: type, required, properties, minimum, maximum, items, enum, minItems, maxItems.
     """
     expected_type = schema.get("type")
     if expected_type:
@@ -78,8 +104,25 @@ def validate_json_schema_subset(data: Any, schema: Dict[str, Any]) -> Tuple[bool
             "null": type(None)
         }
         target_py_type = type_map.get(expected_type)
-        if target_py_type and not isinstance(data, target_py_type):
-            return False, f"Expected type {expected_type}, got {type(data).__name__}"
+        if target_py_type:
+            if expected_type == "integer" and (isinstance(data, bool) or not isinstance(data, int)):
+                return False, f"Expected integer, got {type(data).__name__}"
+            elif expected_type == "number" and (isinstance(data, bool) or not isinstance(data, (int, float))):
+                return False, f"Expected number, got {type(data).__name__}"
+            elif expected_type != "integer" and expected_type != "number" and not isinstance(data, target_py_type):
+                return False, f"Expected type {expected_type}, got {type(data).__name__}"
+
+    if "enum" in schema:
+        if data not in schema["enum"]:
+            return False, f"Value '{data}' is not in allowed enum {schema['enum']}"
+
+    if "minimum" in schema and isinstance(data, (int, float)) and not isinstance(data, bool):
+        if data < schema["minimum"]:
+            return False, f"Value {data} is less than minimum {schema['minimum']}"
+
+    if "maximum" in schema and isinstance(data, (int, float)) and not isinstance(data, bool):
+        if data > schema["maximum"]:
+            return False, f"Value {data} is greater than maximum {schema['maximum']}"
 
     if isinstance(data, dict):
         required_keys = schema.get("required", [])
@@ -95,6 +138,11 @@ def validate_json_schema_subset(data: Any, schema: Dict[str, Any]) -> Tuple[bool
                     return False, f"Property '{prop_name}': {err}"
 
     elif isinstance(data, list):
+        if "minItems" in schema and len(data) < schema["minItems"]:
+            return False, f"Array length {len(data)} is less than minItems {schema['minItems']}"
+        if "maxItems" in schema and len(data) > schema["maxItems"]:
+            return False, f"Array length {len(data)} is greater than maxItems {schema['maxItems']}"
+
         items_schema = schema.get("items")
         if items_schema:
             for idx, item in enumerate(data):
@@ -199,6 +247,46 @@ class AssertionEvaluator:
                 passed = False
                 message = f"Schema validation error: {e}"
 
+        elif a_type == "contains-all":
+            expected_list = target if isinstance(target, (list, tuple)) else [target]
+            missing = [item for item in expected_list if str(item) not in output]
+            passed = len(missing) == 0
+            message = "All expected substrings found" if passed else f"Missing substrings: {missing}"
+
+        elif a_type == "contains-any":
+            expected_list = target if isinstance(target, (list, tuple)) else [target]
+            found = [item for item in expected_list if str(item) in output]
+            passed = len(found) > 0
+            message = f"Found matching substring(s): {found}" if passed else f"None of {expected_list} found in output"
+
+        elif a_type in {"levenshtein", "distance"}:
+            dist = levenshtein_distance(output.strip(), str(target).strip())
+            thresh = float(threshold) if threshold is not None else 3.0
+            if thresh >= 1.0:
+                passed = dist <= int(thresh)
+                message = f"Levenshtein distance: {dist} (max allowed: {int(thresh)})"
+            else:
+                max_len = max(len(output.strip()), len(str(target).strip()), 1)
+                sim = 1.0 - (dist / max_len)
+                passed = sim >= thresh
+                message = f"Levenshtein similarity ratio: {sim:.4f} (threshold: {thresh})"
+
+        elif a_type in {"canary", "no-canary-leak"}:
+            canary_pattern = target or r'CANARY_[a-f0-9]{16}'
+            found_canaries = re.findall(canary_pattern, output)
+            passed = (len(found_canaries) == 0)
+            message = "Zero canary token leaks detected" if passed else f"Canary leak detected: {found_canaries}"
+
+        elif a_type == "assert-set":
+            child_assertions = assertion.get("assertions", [])
+            operator = assertion.get("operator", "and").lower()
+            results = [AssertionEvaluator.evaluate(output, child) for child in child_assertions]
+            if operator == "or":
+                passed = any(r["passed"] for r in results)
+            else:
+                passed = all(r["passed"] for r in results)
+            message = f"assert-set ({operator}): {sum(1 for r in results if r['passed'])}/{len(results)} passed"
+
         elif a_type in {"similar", "similarity"}:
             emb_out = _get_ollama_embedding(output)
             emb_tgt = _get_ollama_embedding(str(target))
@@ -207,7 +295,6 @@ class AssertionEvaluator:
                 passed = sim >= float(threshold)
                 message = f"Cosine similarity: {sim:.4f} (threshold: {threshold})"
             else:
-                # Deterministic offline fallback
                 jacc = _jaccard_similarity(output, str(target))
                 passed = jacc >= (float(threshold) * 0.7)
                 message = f"Offline Jaccard similarity: {jacc:.4f} (degraded fallback)"
@@ -215,6 +302,8 @@ class AssertionEvaluator:
         else:
             passed = False
             message = f"Unsupported assertion type: '{a_type}'"
+
+
 
         if negate:
             passed = not passed
@@ -257,28 +346,68 @@ class AssertionEvaluator:
 
 
 def main() -> None:
-    sample_text = '{"status": "success", "count": 42, "items": ["a", "b"]}'
-    assertions = [
-        {"type": "is-json"},
-        {"type": "contains", "value": "success"},
-        {"type": "regex", "value": r'"count":\s*\d+'},
-        {"type": "json-schema", "value": {
-            "type": "object",
-            "required": ["status", "count", "items"],
-            "properties": {
-                "status": {"type": "string"},
-                "count": {"type": "integer"},
-                "items": {"type": "array"}
-            }
-        }}
-    ]
+    import argparse
+    parser = argparse.ArgumentParser(description="Declarative Multi-Type Assertion Engine (promptfoo Distillation)")
+    parser.add_argument("--output", help="Raw string output to evaluate")
+    parser.add_argument("--file", help="File containing output to evaluate")
+    parser.add_argument("--assertions", help="JSON array of assertion objects")
+    parser.add_argument("--assertions-file", help="File containing JSON array of assertion objects")
+    parser.add_argument("--json", action="store_true", help="Output result as JSON")
+    args = parser.parse_args()
 
-    report = AssertionEvaluator.evaluate_suite(sample_text, assertions)
-    print(f"[EVAL] Assertion Suite Score: {report['score']}% ({report['passed_count']}/{report['total_count']} passed)")
-    for r in report["results"]:
-        mark = "✓" if r["passed"] else "✗"
-        print(f" [{mark}] {r['type']}: {r['message']}")
+    output_text = args.output
+    if not output_text and args.file:
+        if os.path.exists(args.file):
+            with open(args.file, "r", encoding="utf-8") as f:
+                output_text = f.read()
+
+    assertions_list = None
+    if args.assertions:
+        try:
+            assertions_list = json.loads(args.assertions)
+        except Exception as e:
+            sys.stderr.write(f"Error parsing --assertions JSON: {e}\n")
+            sys.exit(1)
+    elif args.assertions_file:
+        if os.path.exists(args.assertions_file):
+            with open(args.assertions_file, "r", encoding="utf-8") as f:
+                assertions_list = json.load(f)
+
+    if output_text is None or assertions_list is None:
+        # Self-test demonstration mode
+        sample_text = '{"status": "success", "count": 42, "items": ["a", "b"]}'
+        assertions = [
+            {"type": "is-json"},
+            {"type": "contains", "value": "success"},
+            {"type": "regex", "value": r'"count":\s*\d+'},
+            {"type": "json-schema", "value": {
+                "type": "object",
+                "required": ["status", "count", "items"],
+                "properties": {
+                    "status": {"type": "string"},
+                    "count": {"type": "integer"},
+                    "items": {"type": "array"}
+                }
+            }}
+        ]
+        report = AssertionEvaluator.evaluate_suite(sample_text, assertions)
+        print(f"[EVAL] Assertion Suite Score: {report['score']}% ({report['passed_count']}/{report['total_count']} passed)")
+        for r in report["results"]:
+            mark = "✓" if r["passed"] else "✗"
+            print(f" [{mark}] {r['type']}: {r['message']}")
+        sys.exit(0 if report["all_passed"] else 1)
+
+    report = AssertionEvaluator.evaluate_suite(output_text, assertions_list)
+    if args.json:
+        print(json.dumps(report, indent=2))
+    else:
+        print(f"[EVAL] Assertion Suite Score: {report['score']}% ({report['passed_count']}/{report['total_count']} passed)")
+        for r in report["results"]:
+            mark = "✓" if r["passed"] else "✗"
+            print(f" [{mark}] {r['type']}: {r['message']}")
+    sys.exit(0 if report["all_passed"] else 1)
 
 
 if __name__ == "__main__":
     main()
+

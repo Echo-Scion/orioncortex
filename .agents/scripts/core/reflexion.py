@@ -11,8 +11,12 @@ import os
 import sys
 import json
 import re
+import uuid
+import subprocess
+import shlex
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from dataclasses import dataclass
+from typing import List, Dict, Any, Optional, Tuple, Union
 
 def _log_telemetry(err: Exception, context: str = "") -> None:
     """Non-fatal telemetry catch for degraded operations."""
@@ -119,6 +123,8 @@ class ReflexionEngine:
                     cause = _extract("Root Cause")
                     rule = _extract("Self-Evolve Invariant") or _extract("Self-Evolve Rule")
 
+                    fix = _extract("Fix Applied")
+
                     learnings.append({
                         "date": date,
                         "title": title,
@@ -128,11 +134,125 @@ class ReflexionEngine:
                         "intervention": intervention,
                         "guard": guard,
                         "root_cause": cause,
+                        "fix_applied": fix,
                         "rule": rule
                     })
         except Exception as e:
             _log_telemetry(e, 'reflexion.py:list_learnings')
         return learnings
+
+    def graduate_learning(self, title_query: str, skill_name: Optional[str] = None, intents_dir: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Graduates a recurring failure learning from LEARNINGS.md into a Sovereign Harness skill intent.
+        Converts the text bullet into a modular skill proposal (SKILL.md + references/remediation.md).
+        """
+        learnings = self.list_learnings()
+        target = None
+        for item in learnings:
+            if title_query.lower() in item["title"].lower():
+                target = item
+                break
+
+        if not target:
+            return {"ok": False, "error": f"Learning with title containing '{title_query}' not found"}
+
+        # Generate clean slug name if not provided
+        if not skill_name:
+            clean = re.sub(r"[^a-z0-9]+", "-", target["title"].lower()).strip("-")
+            clean_slug = clean[:25].rstrip("-")
+            skill_name = f"rule-{clean_slug}" if not clean_slug.startswith("rule-") else clean_slug
+
+        # Ensure valid name pattern
+        if not re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", skill_name):
+            skill_name = "rule-" + re.sub(r"[^a-z0-9]+", "-", skill_name).strip("-")
+
+        # Generate rule-altitude SKILL.md body
+        rule_text = target.get("rule") or target.get("intervention") or target.get("root_cause") or "Execute remediation before commit."
+        trigger_cue = target.get("trigger") or f"encountering {target['title']}"
+        if not re.search(r"(?i)\bwhen\b|[\"'][^\"']+[\"']|`[^`]+`", trigger_cue):
+            trigger_cue = f"Use when {trigger_cue}"
+
+        body = (
+            f"---\n"
+            f"name: {skill_name}\n"
+            f"description: {trigger_cue}\n"
+            f"category: learning\n"
+            f"---\n"
+            f"# {target['title']}\n\n"
+            f"## Invariant Rule\n"
+            f"{rule_text}\n\n"
+            f"See references/remediation.md for full root cause and evidence.\n"
+        )
+
+        remediation_content = (
+            f"# Remediation Trace: {target['title']}\n\n"
+            f"- **Date Recorded**: {target.get('date', '')}\n"
+            f"- **Lowest Viable Tier**: {target.get('tier', 'TIER-0')}\n"
+            f"- **Root Cause**: {target.get('root_cause', '')}\n"
+            f"- **Fix Applied**: {target.get('fix_applied', '')}\n"
+            f"- **Intervention**: {target.get('intervention', '')}\n"
+            f"- **Guard**: {target.get('guard', '')}\n"
+        )
+
+        evidence_text = target.get("evidence") or target.get("root_cause") or "Observed recurring error trace in LEARNINGS.md"
+        reason_text = f"Graduated recurring learning: {target['title']}"
+
+        # Stage through Sovereign Harness IntentQueue
+        from core.harness.staging import IntentQueue, StagedIntent
+        target_intents_dir = intents_dir or os.path.join(WORKSPACE_DIR, '.orion', 'harness', 'intents')
+        queue = IntentQueue(target_intents_dir)
+
+        intent_id = str(uuid.uuid4())[:8]
+        intent = StagedIntent(
+            id=intent_id,
+            action="create",
+            name=skill_name,
+            reason=reason_text,
+            evidence=evidence_text,
+            level="project",
+            body=body,
+            files={"references/remediation.md": remediation_content}
+        )
+
+        target_path = queue.enqueue(intent)
+
+        # Mark in LEARNINGS.md
+        try:
+            with open(self.learnings_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            if target['title'] in content and f"[Graduated to Skill: {skill_name}]" not in content:
+                content = content.replace(
+                    f"— {target['title']}",
+                    f"— {target['title']} [Graduated to Skill: {skill_name}]"
+                )
+                with open(self.learnings_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+        except Exception as _e:
+            _log_telemetry(_e, "reflexion.graduate_learning.mark")
+
+        rel_path = os.path.relpath(target_path, WORKSPACE_DIR).replace(os.sep, '/')
+        return {
+            "ok": True,
+            "intent_id": intent_id,
+            "skill_name": skill_name,
+            "staged_path": rel_path
+        }
+
+    def detect_and_graduate_recurring(self, intents_dir: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Scans all learnings and graduates any that exhibit recurring patterns."""
+        learnings = self.list_learnings()
+        graduated = []
+        seen_titles: Dict[str, int] = {}
+        for l in learnings:
+            t_clean = re.sub(r"\[Graduated.*\]", "", l["title"]).strip().lower()
+            seen_titles[t_clean] = seen_titles.get(t_clean, 0) + 1
+
+        for t_clean, count in seen_titles.items():
+            if count >= 2:
+                res = self.graduate_learning(t_clean, intents_dir=intents_dir)
+                if res.get("ok"):
+                    graduated.append(res)
+        return graduated
 
 
 class PromptRuleCompiler:
@@ -206,9 +326,92 @@ class PromptRuleCompiler:
         }
 
 
+@dataclass(slots=True)
+class TrialAttempt:
+    """Represents a single trial within an epistemic reflection loop."""
+    trial_number: int
+    solution: str
+    error_output: str
+    reflection: str
+
+
+class ReflexionLoop:
+    """
+    In-session verbal reinforcement learning & epistemic trial coordinator.
+    Distilled from Reflexion.
+    Coordinates Actor-Evaluator-Reflector triad, captures error stack traces,
+    synthesizes verbal critique, and halts at 3-trial circuit breaker.
+    """
+    def __init__(self, max_trials: int = 3):
+        self.max_trials = max_trials
+        self.history: List[TrialAttempt] = []
+
+    def record_attempt(self, solution: str, error_output: str, reflection: str) -> TrialAttempt:
+        trial_num = len(self.history) + 1
+        attempt = TrialAttempt(
+            trial_number=trial_num,
+            solution=solution,
+            error_output=error_output,
+            reflection=reflection
+        )
+        self.history.append(attempt)
+        return attempt
+
+    def is_circuit_broken(self) -> bool:
+        """Returns True if trial attempts reach or exceed max_trials."""
+        return len(self.history) >= self.max_trials
+
+    def run_evaluator(self, test_cmd: Union[str, List[str]], timeout: float = 30.0) -> Tuple[int, str]:
+        """Executes mechanical verification command safely without shell=True."""
+        try:
+            if isinstance(test_cmd, list):
+                cmd = test_cmd
+            else:
+                cmd = shlex.split(test_cmd)
+
+            res = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout
+            )
+            combined = f"{res.stdout}\n{res.stderr}".strip() if res.stdout and res.stderr else (res.stdout or res.stderr or "").strip()
+            return res.returncode, combined
+        except subprocess.TimeoutExpired:
+            return 124, f"TimeoutExpired: Evaluator exceeded {timeout}s"
+        except Exception as e:
+            _log_telemetry(e, f"ReflexionLoop:run_evaluator:{test_cmd}")
+            return 1, str(e)
+
+    def synthesize_critique(self, error_output: str) -> str:
+        """Deterministic verbal critique extraction when LLM is offline or in pure-heuristic mode."""
+        lower = error_output.lower()
+        if "syntaxerror" in lower or "indentationerror" in lower:
+            return "Syntax/Formatting Violation: Code fails AST parse. Ensure balanced delimiters and proper indentation."
+        elif "assertionerror" in lower or "assert" in lower:
+            return "Assertion Boundary Failure: The output did not match expected contract invariants. Inspect state deltas."
+        elif "timeout" in lower:
+            return "Resource/Complexity Exhaustion: Execution hung or timed out. Check for infinite loops or blocking I/O."
+        elif "nameerror" in lower or "attributeerror" in lower:
+            return "Symbol Resolution Failure: Unbound variable or missing attribute. Verify import paths and member definitions."
+        return "Runtime Exception: Unhandled error in implementation. Review stack trace."
+
+    def build_reflection_prompt(self, problem: str) -> str:
+        """Constructs context prompt prepending previous failed trials and verbal reflections."""
+        prompt = [f"Task Objective: {problem}\n"]
+        for t in self.history:
+            prompt.append(f"--- Trial {t.trial_number} Failed ---")
+            prompt.append(f"Error Diagnostic:\n{t.error_output}")
+            prompt.append(f"Verbal Self-Reflection:\n{t.reflection}\n")
+        prompt.append("Instruction: Provide a corrected implementation resolving the flaws diagnosed above.")
+        return "\n".join(prompt)
+
+
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="VerbalReflectiveLearner & Self-Evolution Engine (VerbalReflectiveLearner + DeclarativePromptPipeline pattern)")
+    parser = argparse.ArgumentParser(description="VerbalReflectiveLearner & Self-Evolution Engine")
     subparsers = parser.add_subparsers(dest="command")
 
     # Record reflection
@@ -227,8 +430,23 @@ def main():
     subparsers.add_parser("list", help="List all recorded self-evolution learnings")
 
     # Audit rules
-    audit_parser = subparsers.add_parser("audit", help="Audit rule enforcement coverage (DeclarativePromptPipeline pattern)")
+    audit_parser = subparsers.add_parser("audit", help="Audit rule enforcement coverage")
     audit_parser.add_argument("--json", action="store_true", help="JSON output")
+
+    # Trial loop reflect
+    reflect_parser = subparsers.add_parser("reflect", help="Run verbal reflection evaluation loop")
+    reflect_parser.add_argument("--test", required=True, help="Test command to run")
+    reflect_parser.add_argument("--max-trials", type=int, default=3, help="Max trials before circuit breaking")
+
+    # Graduate recurring learning to harness
+    grad_parser = subparsers.add_parser("graduate", help="Graduate a learning from LEARNINGS.md into a staged harness skill")
+    grad_parser.add_argument("--title", required=True, help="Substring of learning title to graduate")
+    grad_parser.add_argument("--name", default="", help="Optional explicit skill name slug")
+    grad_parser.add_argument("--json", action="store_true", help="JSON output")
+
+    # Detect recurring learnings and auto-graduate
+    recur_parser = subparsers.add_parser("detect-recurring", help="Scan learnings for recurring failures and auto-graduate to harness")
+    recur_parser.add_argument("--json", action="store_true", help="JSON output")
 
     args = parser.parse_args()
 
@@ -273,6 +491,42 @@ def main():
             print(f"Mechanically Enforced: {report['enforced_count']} ({report['mechanical_coverage_pct']}%)")
             print(f"Advisory Only        : {report['advisory_count']}")
             print(f"Status               : {'PASS' if report['mechanical_coverage_pct'] >= 40.0 else 'WARN'}\n")
+
+    elif args.command == "reflect":
+        loop = ReflexionLoop(max_trials=args.max_trials)
+        code, output = loop.run_evaluator(args.test)
+        if code == 0:
+            print(f"[EVALUATOR_PASS] Command passed on initial trial (Exit Code 0).")
+        else:
+            critique = loop.synthesize_critique(output)
+            loop.record_attempt(solution=args.test, error_output=output, reflection=critique)
+            print(f"[EVALUATOR_FAIL] Trial 1 failed (Exit Code {code}).")
+            print(f"Critique: {critique}")
+
+    elif args.command == "graduate":
+        res = engine.graduate_learning(
+            title_query=args.title,
+            skill_name=args.name if args.name else None
+        )
+        if args.json:
+            print(json.dumps(res, indent=2))
+        else:
+            if res.get("ok"):
+                print(f"[GRADUATION_OK] Graduated '{args.title}' -> staged skill '{res['skill_name']}'")
+                print(f"                Intent ID  : {res['intent_id']}")
+                print(f"                Staged Path: {res['staged_path']}")
+            else:
+                print(f"[GRADUATION_ERROR] {res.get('error', 'Unknown error')}")
+                sys.exit(1)
+
+    elif args.command == "detect-recurring":
+        res = engine.detect_and_graduate_recurring()
+        if args.json:
+            print(json.dumps(res, indent=2))
+        else:
+            print(f"[RECURRING_SCAN] Found {len(res)} recurring learnings graduated:")
+            for item in res:
+                print(f"  - Graduated to '{item['skill_name']}' (Intent: {item['intent_id']})")
     else:
         parser.print_help()
 

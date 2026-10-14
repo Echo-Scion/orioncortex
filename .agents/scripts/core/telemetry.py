@@ -45,6 +45,7 @@ class SovereignTracer:
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._active_trace_id: Optional[str] = None
         self._span_stack: List[str] = []
+        self._span_counter: int = 0
         self._init_db()
 
     def _init_db(self) -> None:
@@ -131,6 +132,10 @@ class SovereignTracer:
         active_parent = parent_id or (self._span_stack[-1] if self._span_stack else None)
         span_id = f"span_{uuid.uuid4().hex[:10]}"
 
+        self._span_counter += 1
+        meta_dict = dict(metadata) if metadata else {}
+        meta_dict["_seq"] = self._span_counter
+
         span_ctx: Dict[str, Any] = {
             "span_id": span_id,
             "trace_id": active_trace,
@@ -138,7 +143,7 @@ class SovereignTracer:
             "name": name,
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
-            "metadata": metadata or {}
+            "metadata": meta_dict
         }
 
         self._span_stack.append(span_id)
@@ -172,11 +177,25 @@ class SovereignTracer:
                        prompt_tokens, completion_tokens, metadata_json
                 FROM spans
                 WHERE trace_id = ?
-                ORDER BY start_time ASC
             """, (trace_id,))
             rows = cur.fetchall()
-            return [
-                {
+
+            def _sort_key(r):
+                seq = 0
+                if r[9]:
+                    try:
+                        seq = json.loads(r[9]).get("_seq", 0)
+                    except Exception as _e:
+                        _log_telemetry(_e, "telemetry:sort_key")
+
+                return (r[4], seq)
+
+            sorted_rows = sorted(rows, key=_sort_key)
+            result = []
+            for r in sorted_rows:
+                meta = json.loads(r[9]) if r[9] else {}
+                meta.pop("_seq", None)
+                result.append({
                     "span_id": r[0],
                     "trace_id": r[1],
                     "parent_id": r[2],
@@ -186,10 +205,9 @@ class SovereignTracer:
                     "latency_ms": r[6],
                     "prompt_tokens": r[7],
                     "completion_tokens": r[8],
-                    "metadata": json.loads(r[9]) if r[9] else {}
-                }
-                for r in rows
-            ]
+                    "metadata": meta
+                })
+            return result
         except Exception as e:
             _log_telemetry(e, f"telemetry.py:get_trace_spans:{trace_id}")
             return []

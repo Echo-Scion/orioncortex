@@ -92,6 +92,7 @@ activation: when navigating the ecosystem or seeking an overview of agent capabi
 - **verify_agents**: `.agents/scripts/commands/verify_agents.py` (Mechanical & Security Verifier)
 - **audit_aesthetics**: `.agents/evals/audit_aesthetics.py` (Aesthetic, Craft & Contrast Evaluator)
 - **bun_runtime**: `.agents/scripts/core/bun_runtime.py` (Pillar 4 Bun Static Runtime Engine)
+- **sovereign_harness**: `.agents/scripts/core/harness/engine.py` (Self-Learning Skill Harness, Admission Gatekeeper & Lifecycle Engine)
 
 ## 5. 📚 ARCHITECTURE & REFERENCE REGISTRIES
 *Curated protocol standards, domain taxonomies, and capability registries.*

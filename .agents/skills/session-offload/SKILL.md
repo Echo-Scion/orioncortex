@@ -51,6 +51,12 @@ python .agents/scripts/orion.py compress_memory
 ```
 Verify that no obsolete task files remain in `.orion/working/tasks/`.
 
+## 3.2. Sovereign Harness Drain & Skill Promotion
+Drain the staging intent queue so any self-learned skills, umbrellas, or rule patches proposed during this session are validated against the 6 admission classes and atomically committed:
+```pwsh
+python .agents/scripts/orion.py harness promote
+```
+
 ## 3.5. Auto-Context Sync (Conversational Extraction)
 If any new business rules, logic constraints, or architectural decisions were explicitly discussed with the user during this session, you MUST execute the `/auto-context` workflow now. This ensures conversational knowledge is persisted into the `context/` 82-file structure before memory is wiped.
 > **TERMINATION GATE**: Execute `/auto-context` ONCE. Do not re-enter session-offload.md after `/auto-context` completes. After injection, proceed directly to Step 4 without re-evaluating steps 1-3.5.

@@ -58,7 +58,13 @@ This workflow defines how the agent ecosystem learns and updates itself to preve
     - **Rule**: Dictates general AI behavior (e.g., "always use X"). Destination: `.agents/rules/`. **REQUIRES HUMAN APPROVAL via `[DO: YES]` before creation.**
     - **Procedural Playbook / Skill**: Step-by-step situational operation. Destination: `.agents/skills/` (or nested Tier-3 `references/`). Can be generated autonomously.
     - **Skill**: Relies on specific API/Tooling. Destination: `.agents/skills/`. Can be generated autonomously.
-- [ ] **Generate Asset**: Use `.agents/templates/custom-rule.template.md` (or equivalent structure) to generate the new file. **WARNING:** Do NOT attach `activation: always on` frontmatter unless it is an explicitly approved Rule.
+- [ ] **Generate Asset & Sovereign Harness Staging**: 
+  For autonomous skills, stage them through the Sovereign Harness admission gatekeeper:
+  1. Stage proposal: emit intent via `stage_skill` or stage via CLI:
+     ```pwsh
+     python .agents/scripts/orion.py harness promote
+     ```
+  2. The deterministic promoter validates 6 admission classes (AST safety, frontmatter schema, line caps <= 25, no absolute host paths, ledger evidence) before committing to `.agents/skills/`.
 - [ ] **Integrate & Self-Audit**: Update JIT triggers and ensure the new file is indexed correctly (Rules in `RULES_INDEX.md`). If modifying `.agents/` engine itself, verify against `.agents/skills/meta-agent-admin/references/meta-agent-audit.md` and ensure `python .agents/scripts/orion.py verify` returns Exit Code 0. You MUST execute `python .agents/scripts/orion.py orion_ops ingest` to store them back into `.orion/`.
 
 ## 📚 Mandatory Knowledge Routing (JIT References)

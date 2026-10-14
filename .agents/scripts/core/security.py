@@ -17,6 +17,8 @@ import hashlib
 import unicodedata
 import shutil
 import subprocess
+import secrets
+from dataclasses import dataclass
 from typing import List, Dict, Any, Optional, Set, Tuple
 
 def _log_telemetry(err: Exception, context: str = "") -> None:
@@ -72,8 +74,94 @@ SUSPICIOUS_PROMPT_PATTERNS = [
     (re.compile(r'(?i)"postinstall"\s*:\s*"[^"]*(?:curl|wget|powershell|node\s+-e)'), 'REMOTE_BOOTSTRAP', 'Malicious npm postinstall script', 'HIGH'),
 ]
 
+SECRET_PATTERNS = [
+    ("AWS_KEY", re.compile(r'\b(AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b')),
+    ("GITHUB_TOKEN", re.compile(r'\bgh[pousr]_[A-Za-z0-9_]{36,}\b')),
+    ("PRIVATE_KEY", re.compile(r'-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----')),
+    ("GENERIC_SECRET", re.compile(r'(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*[\'"][A-Za-z0-9_\-]{16,}[\'"]')),
+]
+
+def sanitize_text(content: str) -> Tuple[str, List[str]]:
+    """Sanitizes text by scanning and redacting secrets (Repomix distillation)."""
+    warnings = []
+    sanitized = content
+    for name, pattern in SECRET_PATTERNS:
+        matches = pattern.findall(sanitized)
+        if matches:
+            warnings.append(f"Detected {len(matches)} potential {name} secrets.")
+            sanitized = pattern.sub(f"[REDACTED_{name}]", sanitized)
+    return sanitized, warnings
+
+
+@dataclass
+class SecurityFinding:
+    """Security finding mapped to Common Weakness Enumeration (CWE)."""
+    cwe: str
+    severity: str  # CRITICAL, HIGH, MEDIUM, LOW
+    description: str
+    line: int
+    matched_snippet: str
+
+
+INSECURE_RULES = [
+    {
+        "cwe": "CWE-78",
+        "severity": "CRITICAL",
+        "description": "Command injection via shell=True or raw execution",
+        "pattern": re.compile(r'\b(subprocess\.(Popen|run|call)|os\.system)\s*\(.*shell\s*=\s*True.*\)', re.DOTALL)
+    },
+    {
+        "cwe": "CWE-89",
+        "severity": "CRITICAL",
+        "description": "SQL injection via raw string interpolation",
+        "pattern": re.compile(r'(?i)\b(SELECT|INSERT|UPDATE|DELETE)\b.*?\bWHERE\b.*?f[\'"].*?\{.*?\}')
+    },
+    {
+        "cwe": "CWE-22",
+        "severity": "HIGH",
+        "description": "Potential path traversal via unvalidated relative paths",
+        "pattern": re.compile(r'\bopen\s*\(.*?(?:\.\./|\.\.\\).*?\)')
+    },
+    {
+        "cwe": "CWE-327",
+        "severity": "HIGH",
+        "description": "Use of broken cryptographic hash (MD5 or SHA1)",
+        "pattern": re.compile(r'\bhashlib\.(md5|sha1)\s*\(')
+    },
+    {
+        "cwe": "CWE-502",
+        "severity": "HIGH",
+        "description": "Insecure deserialization of untrusted data",
+        "pattern": re.compile(r'\b(pickle\.loads|yaml\.load\s*\(.*?Loader\s*=\s*(yaml\.)?Loader\b)')
+    }
+]
+
+
+def scan_insecure_code(source: str, file_path: str = "") -> Tuple[List[SecurityFinding], int]:
+    """Scans code for common CWE vulnerabilities and computes risk score 0-100 (CodeShield distillation)."""
+    findings = []
+    for rule in INSECURE_RULES:
+        for match in rule["pattern"].finditer(source):
+            line_no = source[:match.start()].count("\n") + 1
+            snippet = match.group(0)
+            if len(snippet) > 80:
+                snippet = snippet[:77] + "..."
+            findings.append(SecurityFinding(
+                cwe=rule["cwe"],
+                severity=rule["severity"],
+                description=rule["description"],
+                line=line_no,
+                matched_snippet=snippet
+            ))
+
+    weights = {"CRITICAL": 30, "HIGH": 15, "MEDIUM": 5, "LOW": 2}
+    total_risk = min(100, sum(weights.get(f.severity, 0) for f in findings))
+    return findings, total_risk
+
 
 DANGEROUS_IMPORTS = {
+
+
     'pty', 'winreg', 'ctypes'
 }
 
@@ -126,27 +214,105 @@ def find_ast_grep() -> Optional[str]:
     return None
 
 
-class CanaryDefense:
+INJECTION_HEURISTIC_PATTERNS = [
+    (re.compile(r'(?i)\bignore\s+(?:all\s+)?(?:previous|prior)\s+instructions\b'), "System instruction ignore directive"),
+    (re.compile(r'(?i)\bsystem\s+prompt\s+override\b'), "System prompt override directive"),
+    (re.compile(r'(?i)\byou\s+are\s+now\s+(?:an?\s+)?(?:unrestricted|jailbroken|DAN)\b'), "Jailbreak persona manipulation"),
+    (re.compile(r'(?i)\breveal\s+(?:your\s+)?(?:system\s+instructions|system\s+prompt|confidential\s+prompt|hidden\s+developer\s+rules)\b'), "System prompt exfiltration attempt"),
+    (re.compile(r'(?i)\boutput\s+the\s+above\s+text\b'), "Instruction replay exfiltration attempt"),
+    (re.compile(r'(?i)\b(?:bypass|disregard)\s+(?:all\s+)?(?:safety|guardrails?|restrictions?|filters?)\b'), "Safety filter bypass attempt"),
+]
+
+KNOWN_ATTACK_SIGNATURES = [
+    "dan mode", "jailbreak", "do anything now", "developer mode enabled",
+    "unrestricted assistant", "override safety", "ignore prior"
+]
+
+
+class PromptSecurityDefense:
+    """
+    Multi-Tier Prompt Injection & Canary Defense Engine.
+    Distilled from Rebuff (Repo 55).
+    Pure Python standard library implementation.
+    """
+
+    @staticmethod
+    def generate_canary(salt: str = "orion") -> str:
+        token = secrets.token_hex(8)
+        return f"CANARY_{token}"
+
+    @staticmethod
+    def inject_canary(prompt: str, canary: str) -> str:
+        return f"<!-- CANARY: {canary} -->\n{prompt}"
+
+    @staticmethod
+    def check_output_for_leak(output: str, canary: str) -> bool:
+        return canary in output
+
+    @classmethod
+    def scan_input_heuristics(cls, text: str) -> Tuple[bool, float, List[str]]:
+        findings = []
+        for pattern, desc in INJECTION_HEURISTIC_PATTERNS:
+            if pattern.search(text):
+                findings.append(desc)
+        if findings:
+            score = min(1.0, 0.5 + 0.25 * len(findings))
+            return True, score, findings
+        return False, 0.0, []
+
+    @classmethod
+    def scan_input_signatures(cls, text: str, custom_signatures: Optional[List[str]] = None) -> Tuple[bool, float, List[str]]:
+        sigs = custom_signatures or KNOWN_ATTACK_SIGNATURES
+        lower_text = text.lower()
+        matched = [s for s in sigs if s in lower_text]
+        if matched:
+            score = min(1.0, 0.4 + 0.3 * len(matched))
+            return True, score, [f"Matched attack signature: '{m}'" for m in matched]
+        return False, 0.0, []
+
+    @classmethod
+    def evaluate_prompt_risk(cls, text: str) -> Dict[str, Any]:
+        h_inj, h_score, h_findings = cls.scan_input_heuristics(text)
+        s_inj, s_score, s_findings = cls.scan_input_signatures(text)
+
+        all_findings = h_findings + s_findings
+        combined_score = max(h_score, s_score)
+        if h_inj and s_inj:
+            combined_score = min(1.0, combined_score + 0.1)
+
+        level = "LOW"
+        if combined_score >= 0.8:
+            level = "CRITICAL"
+        elif combined_score >= 0.5:
+            level = "HIGH"
+        elif combined_score >= 0.2:
+            level = "MEDIUM"
+
+        return {
+            "is_injection": combined_score >= 0.5,
+            "risk_score": round(combined_score, 2),
+            "level": level,
+            "findings": all_findings
+        }
+
+
+class CanaryDefense(PromptSecurityDefense):
     """
     Prompt injection & instruction exfiltration defense.
-    Inspired by protectai/rebuff to detect unauthorized prompt leaks.
+    Maintains compatibility with Rebuff-distilled canary interface.
     """
     @staticmethod
     def generate_token(salt: str = "orion") -> str:
-        raw = f"{salt}:{os.urandom(16).hex()}"
-        return f"CANARY_{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]}"
+        return PromptSecurityDefense.generate_canary(salt)
 
     @staticmethod
     def inject(prompt: str, token: str) -> str:
-        return f"<!-- CANARY_PROBE: {token} -->\n{prompt}"
+        return PromptSecurityDefense.inject_canary(prompt, token)
 
     @staticmethod
     def detect_leaks(text: str, tokens: List[str]) -> List[str]:
-        leaks = []
-        for t in tokens:
-            if t in text:
-                leaks.append(t)
-        return leaks
+        return [t for t in tokens if PromptSecurityDefense.check_output_for_leak(text, t)]
+
 
 
 # Polyglot AST/Regex Security Signatures for non-Python sources

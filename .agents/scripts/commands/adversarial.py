@@ -85,6 +85,20 @@ class AdversarialMutationEngine:
         (r'\breturn\s+false\b', 'return true', 'RETURN_BOOL_LOWER_FALSE'),
         (r'\breturn\s+0\b', 'return 1', 'RETURN_ZERO_TO_ONE'),
         (r'\breturn\s+1\b', 'return 0', 'RETURN_ONE_TO_ZERO'),
+        # Dart null safety & type testing
+        (r'\?\?', '?:', 'DART_NULL_COALESCE_TO_ELVIS'),
+        (r'\bis!\s+', 'is ', 'DART_IS_NOT_TO_IS'),
+        (r'\?\.', '.', 'DART_SAFE_CALL_TO_DIRECT'),
+        # Kotlin elvis & safe calls
+        (r'\?:', '!! ?: ', 'KOTLIN_ELVIS_TO_FORCE'),
+        # Rust unwrap & option/result checks
+        (r'\.unwrap\(\)', '.expect("mutant")', 'RUST_UNWRAP_TO_EXPECT'),
+        (r'\.is_some\(\)', '.is_none()', 'RUST_IS_SOME_TO_IS_NONE'),
+        (r'\.is_none\(\)', '.is_some()', 'RUST_IS_NONE_TO_IS_SOME'),
+        (r'\.is_ok\(\)', '.is_err()', 'RUST_IS_OK_TO_IS_ERR'),
+        (r'\.is_err\(\)', '.is_ok()', 'RUST_IS_ERR_TO_IS_OK'),
+        (r'\bOk\(', 'Err(', 'RUST_OK_TO_ERR'),
+        (r'\bErr\(', 'Ok(', 'RUST_ERR_TO_OK'),
     ]
 
     def __init__(self, test_cmd: str, target_dir: str = "", target_file: str = ""):
@@ -170,7 +184,6 @@ class AdversarialMutationEngine:
     def generate_mutations(self, file_path: str, max_mutants: int = 15) -> List[Dict[str, Any]]:
         """
         Generates AST and syntactic mutations for a target source file across 6 languages.
-        Uses Python AST transformer for .py, and resilient AST operator matching for others.
         """
         if not os.path.isfile(file_path):
             return []
@@ -182,6 +195,14 @@ class AdversarialMutationEngine:
             _log_telemetry(e, f"generate_mutations:read:{file_path}")
             return []
 
+        return self.generate_mutations_for_code(content, file_path, max_mutants)
+
+    def generate_mutations_for_code(self, content: str, file_path: str, max_mutants: int = 30) -> List[Dict[str, Any]]:
+        """
+        Generates AST and syntactic mutations for in-memory source code across 6 languages:
+        Dart, Kotlin, Java, Rust, TypeScript/JavaScript, Python.
+        Excludes comments and string literals from operator mutations.
+        """
         ext = os.path.splitext(file_path)[1].lower()
         mutations: List[Dict[str, Any]] = []
 
@@ -193,26 +214,46 @@ class AdversarialMutationEngine:
 
         # 2. Polyglot syntactic operator mutations (skips comments, strings, annotations)
         lines = content.splitlines(keepends=True)
+        str_com_pattern = re.compile(r'//.*$|/\*.*?\*/|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'')
+        seen_hashes: Set[int] = set()
+
         for line_idx, line in enumerate(lines):
             stripped = line.strip()
             # Ignore comments, docstrings, imports, decorators
             if not stripped or stripped.startswith(('#', '//', '/*', '*', '"""', "'''", '@', 'import ', 'from ')):
                 continue
 
+            # Identify protected intervals (strings and comments) on this line
+            protected_spans = [m.span() for m in str_com_pattern.finditer(line)]
+
             for pattern, replacement, rule_id in self.POLYGLOT_MUTATION_RULES:
-                match = re.search(pattern, line)
-                if match:
-                    start, end = match.span()
-                    mutated_line = line[:start] + replacement + line[end:]
+                try:
+                    regex = re.compile(pattern)
+                except Exception:
+                    continue
+
+                for match in regex.finditer(line):
+                    m_start, m_end = match.span()
+                    # Check if match falls within any protected string or comment span
+                    if any(p_start <= m_start and m_end <= p_end for p_start, p_end in protected_spans):
+                        continue
+
+                    mutated_line = line[:m_start] + replacement + line[m_end:]
                     mutated_lines = list(lines)
                     mutated_lines[line_idx] = mutated_line
+                    mut_content = "".join(mutated_lines)
+                    mut_hash = hash(mut_content)
+                    if mut_hash in seen_hashes:
+                        continue
+                    seen_hashes.add(mut_hash)
+
                     mutations.append({
                         "line_num": line_idx + 1,
                         "rule_id": rule_id,
                         "original_snippet": line.strip(),
                         "mutated_snippet": mutated_line.strip(),
                         "mutation_applied": f"{pattern} -> {replacement}",
-                        "mutated_content": "".join(mutated_lines),
+                        "mutated_content": mut_content,
                         "file_path": file_path
                     })
                     if len(mutations) >= max_mutants:
@@ -221,7 +262,7 @@ class AdversarialMutationEngine:
         return mutations
 
     def _generate_python_ast_mutations(self, content: str, file_path: str, max_mutants: int) -> List[Dict[str, Any]]:
-        """Generates pure Python AST mutations using ast.parse and ast.unparse."""
+        """Generates pure Python AST mutations using ast.parse and ast.unparse across Compare, BinOp, and UnaryOp."""
         try:
             tree = ast.parse(content, filename=file_path)
         except Exception:
@@ -230,7 +271,7 @@ class AdversarialMutationEngine:
         mutants: List[Dict[str, Any]] = []
         lines = content.splitlines(keepends=True)
 
-        class OperatorReplacer(ast.NodeTransformer):
+        class CmpReplacer(ast.NodeTransformer):
             def __init__(self, target_lineno: int, target_col: int, op_type: type, new_op: ast.AST):
                 self.target_lineno = target_lineno
                 self.target_col = target_col
@@ -249,9 +290,35 @@ class AdversarialMutationEngine:
                 node.ops = new_ops
                 return node
 
-        # Scan for AST comparison nodes
+        class BinOpReplacer(ast.NodeTransformer):
+            def __init__(self, target_lineno: int, target_col: int, op_type: type, new_op: ast.AST):
+                self.target_lineno = target_lineno
+                self.target_col = target_col
+                self.op_type = op_type
+                self.new_op = new_op
+                self.replaced = False
+
+            def visit_BinOp(self, node: ast.BinOp):
+                if isinstance(node.op, self.op_type) and node.lineno == self.target_lineno and not self.replaced:
+                    node.op = self.new_op
+                    self.replaced = True
+                return self.generic_visit(node)
+
+        class UnaryOpReplacer(ast.NodeTransformer):
+            def __init__(self, target_lineno: int, target_col: int):
+                self.target_lineno = target_lineno
+                self.target_col = target_col
+                self.replaced = False
+
+            def visit_UnaryOp(self, node: ast.UnaryOp):
+                if isinstance(node.op, ast.Not) and node.lineno == self.target_lineno and not self.replaced:
+                    self.replaced = True
+                    return node.operand
+                return self.generic_visit(node)
+
+        # 1. Comparison AST mutations
         cmp_replacements = [
-            (ast.Eq, ast.NotEq(), "==" , "!="),
+            (ast.Eq, ast.NotEq(), "==", "!="),
             (ast.NotEq, ast.Eq(), "!=", "=="),
             (ast.Lt, ast.GtE(), "<", ">="),
             (ast.Gt, ast.LtE(), ">", "<="),
@@ -268,7 +335,7 @@ class AdversarialMutationEngine:
                         if isinstance(op, old_cls):
                             try:
                                 tree_copy = ast.parse(content, filename=file_path)
-                                replacer = OperatorReplacer(node.lineno, getattr(node, 'col_offset', 0), old_cls, new_instance)
+                                replacer = CmpReplacer(node.lineno, getattr(node, 'col_offset', 0), old_cls, new_instance)
                                 modified_tree = replacer.visit(tree_copy)
                                 ast.fix_missing_locations(modified_tree)
                                 mutated_code = ast.unparse(modified_tree)
@@ -287,7 +354,65 @@ class AdversarialMutationEngine:
                             except Exception as _e:
                                 _log_telemetry(_e, "python_ast_unparse")
 
+        # 2. Binary Arithmetic AST mutations
+        binop_replacements = [
+            (ast.Add, ast.Sub(), "+", "-"),
+            (ast.Sub, ast.Add(), "-", "+"),
+            (ast.Mult, ast.FloorDiv(), "*", "//"),
+            (ast.FloorDiv, ast.Mult(), "//", "*"),
+        ]
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.BinOp):
+                for old_cls, new_instance, old_sym, new_sym in binop_replacements:
+                    if isinstance(node.op, old_cls):
+                        try:
+                            tree_copy = ast.parse(content, filename=file_path)
+                            replacer = BinOpReplacer(node.lineno, getattr(node, 'col_offset', 0), old_cls, new_instance)
+                            modified_tree = replacer.visit(tree_copy)
+                            ast.fix_missing_locations(modified_tree)
+                            mutated_code = ast.unparse(modified_tree)
+                            orig_line = lines[node.lineno - 1].strip() if node.lineno <= len(lines) else ""
+                            mutants.append({
+                                "line_num": node.lineno,
+                                "rule_id": f"AST_BINOP_{old_sym}_TO_{new_sym}",
+                                "original_snippet": orig_line,
+                                "mutated_snippet": f"[AST {old_sym} -> {new_sym}] in line {node.lineno}",
+                                "mutation_applied": f"{old_sym} -> {new_sym}",
+                                "mutated_content": mutated_code,
+                                "file_path": file_path
+                            })
+                            if len(mutants) >= max_mutants:
+                                return mutants
+                        except Exception as _e:
+                            _log_telemetry(_e, "python_ast_binop_unparse")
+
+        # 3. Unary AST mutations (not -> identity)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+                try:
+                    tree_copy = ast.parse(content, filename=file_path)
+                    replacer = UnaryOpReplacer(node.lineno, getattr(node, 'col_offset', 0))
+                    modified_tree = replacer.visit(tree_copy)
+                    ast.fix_missing_locations(modified_tree)
+                    mutated_code = ast.unparse(modified_tree)
+                    orig_line = lines[node.lineno - 1].strip() if node.lineno <= len(lines) else ""
+                    mutants.append({
+                        "line_num": node.lineno,
+                        "rule_id": "AST_UNARY_NOT_INVERT",
+                        "original_snippet": orig_line,
+                        "mutated_snippet": f"[AST not -> identity] in line {node.lineno}",
+                        "mutation_applied": "not x -> x",
+                        "mutated_content": mutated_code,
+                        "file_path": file_path
+                    })
+                    if len(mutants) >= max_mutants:
+                        return mutants
+                except Exception as _e:
+                    _log_telemetry(_e, "python_ast_unary_unparse")
+
         return mutants
+
 
     def apply_mutation(self, file_path: str, mutation: Dict[str, Any]) -> None:
         """Writes mutated source content to file."""

@@ -2,7 +2,9 @@ import os
 import sys
 import re
 import fnmatch
+import math
 import argparse
+from datetime import datetime, timezone
 from typing import List, Dict, Set, Tuple, Optional, Any
 
 def _log_telemetry(err: Exception, context: str = "") -> None:
@@ -19,15 +21,25 @@ if hasattr(sys.stdout, 'reconfigure'):
     except Exception as _e:
         _log_telemetry(_e, 'packer.py:reconfigure')
 
-# Common high-entropy or API key secret patterns
-SECRET_PATTERNS = [
-    (re.compile(r'(?i)(?:api_key|apikey|secret|password|passwd|auth_token|access_token|private_key)\s*[:=]\s*["\']([A-Za-z0-9_\-\.\/+=]{16,})["\']'), "SUSPICIOUS_KEY_VALUE"),
-    (re.compile(r'ghp_[A-Za-z0-9]{36}'), "GITHUB_PERSONAL_ACCESS_TOKEN"),
-    (re.compile(r'glpat-[A-Za-z0-9_\-]{20}'), "GITLAB_PERSONAL_ACCESS_TOKEN"),
-    (re.compile(r'sk-[A-Za-z0-9]{32,}'), "OPENAI_API_KEY"),
-    (re.compile(r'AIza[0-9A-Za-z-_]{35}'), "GOOGLE_API_KEY"),
-    (re.compile(r'-----BEGIN\s+(?:RSA|EC|DSA|OPENSSH)?\s*PRIVATE\s+KEY-----'), "PRIVATE_KEY_BLOCK"),
-]
+try:
+    from core.security import sanitize_text, SECRET_PATTERNS
+except Exception:
+    SECRET_PATTERNS = [
+        ("AWS_KEY", re.compile(r'\b(AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b')),
+        ("GITHUB_TOKEN", re.compile(r'\bgh[pousr]_[A-Za-z0-9_]{36,}\b')),
+        ("PRIVATE_KEY", re.compile(r'-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----')),
+        ("GENERIC_SECRET", re.compile(r'(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*[\'"][A-Za-z0-9_\-]{16,}[\'"]')),
+    ]
+
+    def sanitize_text(content: str) -> Tuple[str, List[str]]:
+        warnings = []
+        sanitized = content
+        for name, pattern in SECRET_PATTERNS:
+            matches = pattern.findall(sanitized)
+            if matches:
+                warnings.append(f"Detected {len(matches)} potential {name} secrets.")
+                sanitized = pattern.sub(f"[REDACTED_{name}]", sanitized)
+        return sanitized, warnings
 
 DEFAULT_IGNORE_DIRS = {
     '.git', 'node_modules', '__pycache__', '.venv', 'venv', 'target', 'build',
@@ -40,12 +52,88 @@ DEFAULT_TEXT_EXTENSIONS = {
     '.xml', '.sh', '.bat', '.ps1', '.c', '.h', '.cpp', '.hpp', '.go'
 }
 
+LANG_MAP = {
+    '.py': 'python',
+    '.dart': 'dart',
+    '.kt': 'kotlin',
+    '.java': 'java',
+    '.rs': 'rust',
+    '.ts': 'typescript',
+    '.tsx': 'typescript',
+    '.js': 'javascript',
+    '.jsx': 'javascript',
+    '.json': 'json',
+    '.yaml': 'yaml',
+    '.yml': 'yaml',
+    '.md': 'markdown',
+    '.toml': 'toml',
+    '.sql': 'sql',
+    '.html': 'html',
+    '.css': 'css',
+    '.xml': 'xml',
+    '.sh': 'bash'
+}
+
+
+def is_binary_file(path: str) -> bool:
+    """Detects whether a file is binary by inspecting initial 1,024 bytes (Repo 26: gitingest)."""
+    try:
+        with open(path, "rb") as f:
+            chunk = f.read(1024)
+            return b"\x00" in chunk
+    except OSError:
+        return True
+
+
+def estimate_tokens(content: str) -> int:
+    """Estimates token count with character division heuristic (len / 3.8)."""
+    if not content:
+        return 0
+    return math.ceil(len(content) / 3.8)
+
+
+def generate_ascii_tree(
+    dir_path: str,
+    prefix: str = "",
+    max_depth: int = 4,
+    ignore_filter: Optional[Any] = None
+) -> List[str]:
+    """Generates ASCII directory tree structure with connectors (Repo 26: gitingest)."""
+    if max_depth <= 0:
+        return []
+    lines = []
+    try:
+        entries = sorted(
+            [e for e in os.scandir(dir_path) if not e.name.startswith(".")],
+            key=lambda x: (not x.is_dir(), x.name.lower())
+        )
+    except (PermissionError, OSError):
+        return []
+
+    filtered = []
+    for entry in entries:
+        rel = os.path.relpath(entry.path, dir_path)
+        if ignore_filter and ignore_filter.is_ignored(rel, is_dir=entry.is_dir()):
+            continue
+        if any(p in DEFAULT_IGNORE_DIRS for p in entry.name.split("/")):
+            continue
+        filtered.append(entry)
+
+    count = len(filtered)
+    for i, entry in enumerate(filtered):
+        connector = "└── " if i == count - 1 else "├── "
+        lines.append(f"{prefix}{connector}{entry.name}")
+        if entry.is_dir():
+            extension = "    " if i == count - 1 else "│   "
+            lines.extend(generate_ascii_tree(entry.path, prefix + extension, max_depth - 1, ignore_filter))
+    return lines
+
 
 class GitIgnoreFilter:
-    """Lightweight gitignore matcher supporting wildcards and directory exclusions."""
+    """Lightweight gitignore matcher supporting wildcards, negations, and directory exclusions."""
     def __init__(self, root_dir: str):
         self.root_dir = os.path.abspath(root_dir)
-        self.rules: List[Tuple[str, bool, bool]] = [] # (pattern, is_negation, is_dir_only)
+        self.rules: List[Tuple[str, bool, bool]] = []  # (pattern, is_negation, is_dir_only)
         self._load_root_gitignore()
 
     def _load_root_gitignore(self) -> None:
@@ -68,6 +156,19 @@ class GitIgnoreFilter:
         except Exception as _e:
             _log_telemetry(_e, "GitIgnoreFilter:load")
 
+    def add_rule(self, line: str) -> None:
+
+        line = line.strip()
+        if not line or line.startswith('#'):
+            return
+        is_neg = line.startswith('!')
+        if is_neg:
+            line = line[1:].strip()
+        is_dir = line.endswith('/')
+        if is_dir:
+            line = line[:-1]
+        self.rules.append((line, is_neg, is_dir))
+
     def is_ignored(self, rel_path: str, is_dir: bool = False) -> bool:
         norm = rel_path.replace('\\', '/')
         name = os.path.basename(norm)
@@ -79,12 +180,18 @@ class GitIgnoreFilter:
             return True
 
         for pat, is_neg, dir_only in self.rules:
+            if pat.startswith('!'):
+                pat = pat[1:]
+                is_neg = True
             if dir_only and not is_dir:
                 continue
             matched = False
-            if '/' in pat:
-                clean_pat = pat.lstrip('/')
-                matched = fnmatch.fnmatch(norm, clean_pat) or fnmatch.fnmatch(norm, f"{clean_pat}/*")
+            if pat.startswith('/'):
+                # Root-anchored match
+                anchored = pat.lstrip('/')
+                matched = fnmatch.fnmatch(norm, anchored) or (is_dir and fnmatch.fnmatch(norm, f"{anchored}/*"))
+            elif '/' in pat:
+                matched = fnmatch.fnmatch(norm, pat) or fnmatch.fnmatch(norm, f"{pat}/*")
             else:
                 matched = fnmatch.fnmatch(name, pat) or fnmatch.fnmatch(norm, f"*/{pat}/*")
 
@@ -105,7 +212,7 @@ class ContextPacker:
         findings = []
         lines = content.splitlines()
         for idx, line in enumerate(lines, 1):
-            for pat, sec_type in SECRET_PATTERNS:
+            for sec_type, pat in SECRET_PATTERNS:
                 if pat.search(line):
                     redacted = line[:10] + "..." + line[-6:] if len(line) > 16 else "[REDACTED]"
                     findings.append((idx, sec_type, redacted.strip()))
@@ -116,7 +223,8 @@ class ContextPacker:
         self,
         target_dir: Optional[str] = None,
         max_files: int = 500,
-        allowed_extensions: Optional[Set[str]] = None
+        allowed_extensions: Optional[Set[str]] = None,
+        max_size_bytes: int = 1048576
     ) -> List[str]:
         base = os.path.abspath(target_dir or self.root_dir)
         exts = allowed_extensions or DEFAULT_TEXT_EXTENSIONS
@@ -126,25 +234,44 @@ class ContextPacker:
             rel_root = os.path.relpath(root, self.root_dir)
             # Prune ignored directories in-place
             dirs[:] = [d for d in dirs if not self.gi.is_ignored(os.path.join(rel_root, d), is_dir=True)]
-            for file in files:
+            for file in sorted(files):
                 rel_file = os.path.relpath(os.path.join(root, file), self.root_dir).replace('\\', '/')
                 if self.gi.is_ignored(rel_file, is_dir=False):
                     continue
                 ext = os.path.splitext(file)[1].lower()
                 if ext in exts:
+                    full_p = os.path.join(root, file)
+                    try:
+                        if os.path.getsize(full_p) > max_size_bytes:
+                            continue
+                        if is_binary_file(full_p):
+                            continue
+                    except OSError:
+                        continue
+
                     collected.append(rel_file)
                     if len(collected) >= max_files:
                         return collected
         return collected
 
-    def pack_xml(self, files: List[str], max_tokens: int = 100000, scrub_secrets: bool = True) -> Dict[str, Any]:
-        """Packs collected files into an XML envelope: <files><file path="...">...</file></files>."""
-        output_chunks = ['<files>']
-        total_chars = 7
-        budget_chars = max_tokens * 4
+    def pack_xml(
+        self,
+        files: List[str],
+        max_tokens: int = 100000,
+        scrub_secrets: bool = True
+    ) -> Dict[str, Any]:
+        """Packs collected files into an XML envelope according to Repomix schema."""
+        tree_lines = generate_ascii_tree(self.root_dir, max_depth=3, ignore_filter=self.gi)
+        tree_block = "\n".join(tree_lines)
+        
+        iso_now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         packed_files = []
         omitted_files = []
         secret_alerts = []
+        file_blocks = []
+        
+        # Base metadata overhead estimate
+        running_tokens = estimate_tokens(tree_block) + 50
 
         for rel_p in files:
             full_p = os.path.join(self.root_dir, rel_p)
@@ -155,46 +282,65 @@ class ContextPacker:
                 _log_telemetry(_e, f"pack_file:{rel_p}")
                 continue
 
-            secrets = self.scan_secrets(content)
-            if secrets:
-                secret_alerts.append({"file": rel_p, "secrets": secrets})
-                if scrub_secrets:
-                    # Redact discovered secrets
-                    for line_no, sec_type, _ in secrets:
-                        for pat, _ in SECRET_PATTERNS:
-                            content = pat.sub(f"[REDACTED_{sec_type}]", content)
+            if scrub_secrets:
+                sanitized_content, warnings = sanitize_text(content)
+                if warnings:
+                    secret_alerts.append({"file": rel_p, "warnings": warnings})
+                content = sanitized_content
 
-            block = f'\n  <file path="{rel_p}">\n{content}\n  </file>'
-            if total_chars + len(block) + 9 > budget_chars:
+            line_count = len(content.splitlines())
+            file_tok = estimate_tokens(content)
+
+            block = f'  <file path="{rel_p}" lines="{line_count}" tokens="{file_tok}">\n{content}\n  </file>'
+            block_tok = file_tok + 15
+
+            if running_tokens + block_tok > max_tokens:
                 omitted_files.append(rel_p)
                 continue
 
-            output_chunks.append(block)
-            total_chars += len(block)
+            file_blocks.append(block)
+            running_tokens += block_tok
             packed_files.append(rel_p)
 
-        output_chunks.append('\n</files>')
-        full_text = "".join(output_chunks)
+        envelope_chunks = [
+            "<repository_context>",
+            "  <metadata>",
+            f"    <generated_at>{iso_now}</generated_at>",
+            f"    <file_count>{len(packed_files)}</file_count>",
+            f"    <total_tokens>{running_tokens}</total_tokens>",
+            "  </metadata>",
+            "  <directory_structure>",
+            tree_block,
+            "  </directory_structure>"
+        ]
+        envelope_chunks.extend(file_blocks)
+        envelope_chunks.append("</repository_context>")
+        full_text = "\n".join(envelope_chunks)
 
         return {
             "format": "xml",
             "packed_files_count": len(packed_files),
             "omitted_files_count": len(omitted_files),
-            "estimated_tokens": len(full_text) // 4,
+            "estimated_tokens": estimate_tokens(full_text),
             "secret_alerts": secret_alerts,
             "envelope": full_text
         }
 
-    def pack_digest(self, files: List[str], max_tokens: int = 100000) -> str:
+    def pack_digest(
+        self,
+        files: List[str],
+        max_tokens: int = 100000,
+        scrub_secrets: bool = True
+    ) -> str:
         """Packs files into a high-density Markdown digest (GitIngest pattern)."""
-        tree_lines = ["# Codebase Digest", "", "## File Tree", "```"]
-        for f in files:
-            tree_lines.append(f"  {f}")
-        tree_lines.extend(["```", "", "## Content", ""])
+        repo_name = os.path.basename(os.path.abspath(self.root_dir))
+        tree_lines = generate_ascii_tree(self.root_dir, max_depth=3, ignore_filter=self.gi)
+        tree_block = "\n".join(tree_lines)
 
-        total_chars = sum(len(l) for l in tree_lines)
-        budget_chars = max_tokens * 4
         content_sections = []
+        packed_files = []
+        total_chars = 0
+        running_tokens = estimate_tokens(tree_block) + 40
 
         for rel_p in files:
             full_p = os.path.join(self.root_dir, rel_p)
@@ -204,35 +350,68 @@ class ContextPacker:
             except Exception:
                 continue
 
-            header = f"### `{rel_p}`\n```\n"
+            if scrub_secrets:
+                content, _ = sanitize_text(content)
+
+            line_count = len(content.splitlines())
+            file_tok = estimate_tokens(content)
+            ext = os.path.splitext(rel_p)[1].lower()
+            lang = LANG_MAP.get(ext, "")
+
+            header = (
+                "================================================\n"
+                f"File: `{rel_p}` ({line_count} lines, ~{file_tok} tokens)\n"
+                "================================================\n"
+                f"```{lang}\n"
+            )
             footer = "\n```\n\n"
-            block_len = len(header) + len(content) + len(footer)
-            if total_chars + block_len > budget_chars:
-                content_sections.append(f"### `{rel_p}`\n*(Truncated: token budget reached)*\n\n")
+            section_tokens = file_tok + 25
+
+            if running_tokens + section_tokens > max_tokens:
+                content_sections.append(
+                    f"================================================\n"
+                    f"File: `{rel_p}` (Truncated: token budget reached)\n"
+                    f"================================================\n\n"
+                )
                 break
 
             content_sections.append(header + content + footer)
-            total_chars += block_len
+            running_tokens += section_tokens
+            packed_files.append(rel_p)
+            total_chars += len(content)
 
-        return "\n".join(tree_lines) + "".join(content_sections)
+        size_kb = round(total_chars / 1024, 1)
+        digest_header = (
+            f"# Repository Digest: {repo_name}\n"
+            f"- Files: {len(packed_files)} | Estimated Tokens: {running_tokens} | Size: {size_kb} KB\n\n"
+            "## Directory Structure\n"
+            "```\n"
+            f"{tree_block}\n"
+            "```\n\n"
+            "## File Contents\n\n"
+        )
+
+        return digest_header + "".join(content_sections)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Security-Aware Context Packager (Repomix & GitIngest Distillation)")
     parser.add_argument("--dir", default=".", help="Root directory to pack")
-    parser.add_argument("--format", choices=["xml", "digest"], default="xml", help="Output envelope format")
-    parser.add_argument("--budget", type=int, default=100000, help="Maximum token budget (default: 100k)")
-    parser.add_argument("--out", help="Optional output destination file")
+    parser.add_argument("--format", choices=["xml", "digest", "markdown"], default="xml", help="Output envelope format")
+    parser.add_argument("--budget", "--max-tokens", dest="budget", type=int, default=100000, help="Maximum token budget (default: 100k)")
+    parser.add_argument("--max-size-kb", type=int, default=1024, help="Maximum file size in KB to inspect")
+    parser.add_argument("--out", "--output", dest="out", help="Optional output destination file")
+    parser.add_argument("--redact", action="store_true", default=True, help="Scrub secrets in packed content")
     args = parser.parse_args()
 
     packer = ContextPacker(args.dir)
-    files = packer.collect_files()
+    files = packer.collect_files(max_size_bytes=args.max_size_kb * 1024)
     if args.format == "xml":
-        res = packer.pack_xml(files, max_tokens=args.budget)
+        res = packer.pack_xml(files, max_tokens=args.budget, scrub_secrets=args.redact)
         out_content = res["envelope"]
         summary = f"[PACKER] Packed {res['packed_files_count']} files (~{res['estimated_tokens']} tokens, {len(res['secret_alerts'])} secret alerts)"
     else:
-        out_content = packer.pack_digest(files, max_tokens=args.budget)
+        out_content = packer.pack_digest(files, max_tokens=args.budget, scrub_secrets=args.redact)
         summary = f"[PACKER] Generated markdown digest for {len(files)} files"
 
     if args.out:
@@ -240,7 +419,7 @@ def main() -> None:
             f.write(out_content)
         print(f"{summary} -> {args.out}")
     else:
-        print(summary)
+        print(out_content)
 
 
 if __name__ == "__main__":

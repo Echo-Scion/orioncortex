@@ -70,6 +70,7 @@ def main():
     parser.add_argument("--terminal-error", type=str, default="", help="The last active terminal error or exception")
     parser.add_argument("--ide-source", type=str, default="unknown", help="The source IDE calling this hook")
     parser.add_argument("--user-intent", type=str, default="", help="Any pre-processed user intent")
+    parser.add_argument("--conversation-id", type=str, default="", help="Active conversation or session ID")
     parser.add_argument("--hook", action="store_true", help="Run in hook mode outputting valid JSON payload")
     
     args = parser.parse_args()
@@ -104,6 +105,51 @@ def main():
 
     # 5. Removed drift_detector (now JIT)
     drift_warnings = []
+
+    # 6. Sovereign Harness Lifecycle & Skill Index Surfacing
+    harness_index = ""
+    harness_lifecycle = {}
+    session_id = conversation_id or args.conversation_id or os.environ.get("ANTIGRAVITY_CONVERSATION_ID") or "default_session"
+    scripts_dir = os.path.join(base_agents_dir, 'scripts')
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+
+    try:
+        from core.harness.engine import HarnessEngine
+        harness = HarnessEngine()
+        harness.increment_request_count()
+        harness_lifecycle = harness.evaluate_lifecycle(maturity=100, capacity=50, execute_archive=True)
+        harness_index = harness.build_session_index(max_desc_chars=90)
+    except Exception as _h_err:
+        _log_telemetry(_h_err, "harness_lifecycle_pre_wake")
+
+    # 7. Virtual Core Memory (Tier 0 - Persona & Human Invariants)
+    core_memory_data = {}
+    core_memory_prompt = ""
+    try:
+        from core.memory import CoreMemoryManager
+        core_mem_mgr = CoreMemoryManager()
+        core_memory_data = core_mem_mgr.get_all()
+        core_memory_prompt = core_mem_mgr.format_prompt_block()
+    except Exception as _cm_err:
+        _log_telemetry(_cm_err, "core_memory_pre_wake")
+
+    # 8. Session Quantum Telemetry
+    session_telemetry = {}
+    try:
+        from core.harness.capture import ToolQuantumCapture
+        harness_state_dir = os.path.join(WORKSPACE_DIR, '.orion', 'harness')
+        capture = ToolQuantumCapture(state_dir=harness_state_dir)
+        session_state = capture.load_session(session_id)
+        session_telemetry = {
+            "session_id": session_state.session_id,
+            "tool_call_count": session_state.tool_call_count,
+            "calls_since_last_reflection": session_state.tool_call_count - session_state.last_reflection_call,
+            "quantum_threshold": capture.quantum_threshold,
+            "active": session_state.active
+        }
+    except Exception as _st_err:
+        _log_telemetry(_st_err, "session_telemetry_pre_wake")
             
     def sanitize_input(text):
         if not text: return text
@@ -125,6 +171,15 @@ def main():
         "identity_path": os.path.relpath(identity_path, WORKSPACE_DIR).replace(os.sep, '/') if identity_exists else None,
         "top_lessons": top_lessons,
         "drift_warnings": drift_warnings,
+        "core_memory": core_memory_data,
+        "core_memory_prompt": core_memory_prompt,
+        "session_telemetry": session_telemetry,
+        "harness_skill_index": harness_index,
+        "harness_lifecycle": {
+            "retained_count": harness_lifecycle.get("retained_count", 0),
+            "probation_count": harness_lifecycle.get("probation_count", 0),
+            "archived_count": harness_lifecycle.get("archived_count", 0)
+        } if harness_lifecycle else None,
         "antigravity": {
             "conversation_id": conversation_id,
             "transcript_path": transcript_path,
