@@ -168,16 +168,30 @@ The framework operates as a distributed architecture to share knowledge across a
 - **The Spokes (Target Projects)**: Local `.agents` folders deployed to your apps, remaining tethered to the Hub.
 - **Cross-Project Sync**: If the AI learns a new optimization in Project A, the developer can run `orion.py foundation push-upstream` to manually propose it to the Hub. When deployed to Project B, it instantly inherits those curated learnings.
 
+### The Four (4) Anchored Foundation Pillars
+The engine operates on four permanently anchored, zero-daemon pillars:
+1. **Pillar 1: Python 3.10+ Stdlib** — Pure standard library orchestration, SQLite3 FTS5 GraphRAG, Louvain community clustering, and DevSecOps verification. Enforces Zero-Pip Mandate.
+2. **Pillar 2: Cargo Rust Engine (`rtk` + `ast-grep`)** — Sub-millisecond terminal context compression (`rtk`) and polyglot Concrete Syntax Tree (CST) structural AST analysis across 20+ languages (`ast-grep`).
+3. **Pillar 3: Ollama Neural Coprocessor** — Local zero-cloud embeddings (`nomic-embed-text`) and heuristic SLM judgment (`127.0.0.1:11434`).
+4. **Pillar 4: Bun Static Runtime Engine (`bun`)** — Instant zero-compile TypeScript execution, on-the-fly MCP server spawning via `bunx`, and microsecond mutation test execution (`bun test` in <4ms) without `node_modules` pollution.
+
+### Distilled Capabilities (57-Repo Reverse Engineering)
+- **Visual Craft Floor & Brief Dials (`ui-finish`)**: 12 mechanical design rules, 8 interaction states, strict WCAG AA contrast, and Lucide vector design tokens.
+- **SkillSpector & QA Sentinel (`integrity-sentinel`)**: Two-line static AST & semantic review rubric for skill overprivilege, prompt injection immunity, and silent exception swallow detection.
+- **Continuous Execution Loop (`worker-delegate`)**: Autonomous multi-turn task progression ("Rulings, Not Stalls") with strict stop conditions and subagent delegation.
+
 ---
 
 ## 🚀 Quickstart & Deployment
 
 The Universal template can be injected into any repository (Node, Rust, Flutter, Python, Go) to align the AI workflow.
 
-### 📌 Prerequisites
-- **Python 3.10+** must be installed on your machine.
-- Works best with **RTK** and a **Local LLM for Embeddings** (e.g. Ollama `nomic-embed-text`).
-- Your target project must have a basic structure initialized.
+### 📌 Prerequisites & Four-Pillar Tooling
+- **Pillar 1 (Core)**: Python 3.10+ (pure stdlib).
+- **Pillar 2 (System)**: `rtk` (Rust Token Killer) + `ast-grep` (`sg`).
+- **Pillar 3 (Neural)**: Ollama with `nomic-embed-text` (`127.0.0.1:11434`).
+- **Pillar 4 (Runtime)**: `bun` (Bun Static Runtime) in PATH or `.agents/bin/`.
+- *Graceful Degradation*: If Pillars 2–4 are absent, the system degrades automatically to pure Python stdlib without interrupting workflows.
 
 ### ⚡ 1. Direct Terminal Drop-In (Recommended)
 
@@ -214,6 +228,8 @@ python .agents/scripts/orion.py verify_agents
 
 This foundation synthesizes principles from top open-source optimization tools:
 - **[rtk-ai/rtk](https://github.com/rtk-ai/rtk)**: (Active Binary) Compresses and filters verbose terminal output.
+- **[ast-grep/ast-grep](https://github.com/ast-grep/ast-grep)**: (Active Binary) Polyglot Tree-sitter CST structural code intelligence.
+- **[oven-sh/bun](https://github.com/oven-sh/bun)**: (Static Runtime) Zero-compile TypeScript execution and fast test runner.
 - **[JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman)**: (Protocol) Telegraphic communication mapping for token reduction.
 - **[Obsidian](https://obsidian.md)** & **[kepano/obsidian-skills](https://github.com/kepano/obsidian-skills)**: (Concept & Vault Interop) Source of graph-view knowledge mapping, `[[wikilinks]]` Second Brain convention, and interactive vault visualization supported natively via `.orion` export (`python .agents/scripts/orion.py memory export-vault`).
 

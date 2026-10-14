@@ -79,14 +79,15 @@
 - Prevents spatial and task loss during unexpected IDE restarts.
 
 ### 9.10. `prerequisites.md`
-**Graceful Fallback Matrix. Defines 4 prerequisites and their fallbacks:**
+**Graceful Fallback Matrix. Defines the 4 Anchored Pillars and their fallbacks:**
 
-| Prerequisite | Fallback |
+| Pillar / Prerequisite | Fallback |
 |:--|:--|
-| RTK (Rust) | `grep_search` or `view_file` with line range |
-| Orion (Python) | Manual `grep_search` on `.orion/` |
-| QMD/Ollama | Manual `grep_search` and traversal |
-| Subagent Orchestration | Handle in main thread with aggressive `grep_search` |
+| **Pillar 1: Python Stdlib (Orion)** | Manual `grep_search` on `.orion/` or `.agents/` |
+| **Pillar 2: Cargo Rust (`rtk` + `ast-grep`)** | `view_file` / `grep_search`; Python `ast` + regex extraction |
+| **Pillar 3: Ollama Coprocessor** | SQLite3 FTS5 BM25 lexical search & static heuristics |
+| **Pillar 4: Bun Static Runtime (`bun`)** | Python stdlib stdio bridge or host language test runner |
+| **Subagent Orchestration** | Handle in main thread with continuous execution loop |
 
 ### 9.11. `antigravity-rtk-rules.md`
 Specific rules for RTK integration in the Antigravity IDE. Decision tree and command examples.
@@ -96,6 +97,9 @@ Compiled index of all rules. Parsed by NanoBrain for fast filtering during JIT r
 
 ### 9.13. `prose-authenticity.md`
 Standards for anti-slop documentation, eliminating AI structural tells, binary contrast reversals, and jargon purge.
+
+### 9.14. `four-pillars-architecture.md`
+Architectural specification governing the Four (4) Anchored Pillars, the Zero-Pip mandate, zero-daemon execution, and graceful degradation matrix.
 
 ---
 

@@ -513,6 +513,9 @@ class OrionGraphStore:
                     LIMIT ?
                 """, (clean_fts_query, top_k_communities))
                 for r in cur.fetchall():
+                    m_cur = self.conn.cursor()
+                    m_cur.execute("SELECT entity_name FROM community_members WHERE community_id = ? LIMIT 8", (r["id"],))
+                    comm_members = [m["entity_name"] for m in m_cur.fetchall()]
                     macro_results.append({
                         "id": r["id"],
                         "level": r["level"],
@@ -520,6 +523,7 @@ class OrionGraphStore:
                         "dominant_type": r["dominant_type"],
                         "size": r["size"],
                         "summary": r["summary"],
+                        "members": comm_members,
                         "modularity_q": r["modularity_q"],
                         "bm25_score": round(float(r["rank"]), 4)
                     })
@@ -613,11 +617,20 @@ class OrionGraphStore:
         n_relations = cur.fetchone()[0]
         cur.execute("SELECT COUNT(*) FROM communities")
         n_communities = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM community_members")
+        n_members = cur.fetchone()[0]
         return {
             "entities_count": n_entities,
             "relations_count": n_relations,
-            "communities_count": n_communities
+            "communities_count": n_communities,
+            "community_members_count": n_members
         }
+
+    def get_community_members(self, community_id: int) -> List[str]:
+        """Returns entity names belonging to a community cluster."""
+        cur = self.conn.cursor()
+        cur.execute("SELECT entity_name FROM community_members WHERE community_id = ?", (community_id,))
+        return [r["entity_name"] for r in cur.fetchall()]
 
     def close(self) -> None:
         """Closes the underlying SQLite connection."""

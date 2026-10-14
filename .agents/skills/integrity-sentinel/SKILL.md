@@ -117,6 +117,7 @@ For high-stakes boundaries, execute mechanical probes against these failure vect
 | **Runtime Bugs, Crashes, Errors, Debugging** | .agents/skills/integrity-sentinel/references/telemetry-gate.md |
 | **General QA, Edge Cases** | .agents/skills/integrity-sentinel/references/master-audit.md |
 | **Codebase Audit, Audit Ledger, Multi-Session Audit** | .agents/skills/integrity-sentinel/references/audit-ledger.md |
+| **Agent Skill Audit, SkillSpector, Overprivilege, Tool Permissions** | .agents/skills/integrity-sentinel/references/skill_inspector.md |
 | **Comprehensive Deep Audit (Fallback)** | .agents/skills/integrity-sentinel/references/master-audit.md |
 
 ### The Reference Evidence Flag

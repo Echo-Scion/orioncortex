@@ -118,3 +118,14 @@ If `rtk` is not available (`command not found`), the agent must degrade to nativ
 
 ---
 
+## Chapter 5: The Four (4) Anchored Foundation Pillars & Pillar 4 (Bun)
+
+### 5.1. The Sovereign Architecture
+The `.agents` engine operates on four permanently anchored pillars designed for zero-daemon, air-gapped sovereignty:
+1. **Pillar 1: Python 3.10+ Stdlib** — Primary cognitive orchestrator, SQLite3 FTS5 graph database, Louvain community clustering, and AST linters. Strictly zero-pip.
+2. **Pillar 2: Cargo Rust Engine (`rtk` + `ast-grep`)** — Native compiled binaries. `rtk` strips 60–90% terminal noise; `ast-grep` (`sg`) provides polyglot Tree-sitter Concrete Syntax Tree (CST) structural code search and AST mutations across 20+ languages.
+3. **Pillar 3: Ollama Neural Coprocessor (`127.0.0.1:11434`)** — Zero-cloud local embedding inference (`nomic-embed-text`) and heuristic judging coprocessor.
+4. **Pillar 4: Bun Static Runtime Engine (`bun`)** — Standalone static binary providing zero-compile TypeScript execution, zero-install MCP server launching via `bun x -y <package>`, microsecond mutation testing (<4ms `bun test`), and headless UI validation.
+
+### 5.2. Zero In-Repo Pollution Mandate
+Pillar 4 runs with zero in-repo `node_modules` and zero background daemons. Dependencies are cached globally in user cache (`~/.bun/install/cache`), keeping `.agents/` and the host workspace clean. If Bun is absent, the system degrades automatically to pure Python stdlib.

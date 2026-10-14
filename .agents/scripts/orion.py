@@ -71,7 +71,17 @@ CMD_MAP = {
     "pack": ["utils", "packer.py"],
     "packer": ["utils", "packer.py"],
     "mcp": ["core", "mcp_client.py"],
-    "assert": ["..", "evals", "assertion_engine.py"]
+    "assert": ["..", "evals", "assertion_engine.py"],
+    "bun": ["core", "bun_runtime.py"],
+    "bun_runtime": ["core", "bun_runtime.py"],
+    "compact": ["core", "compactor.py"],
+    "compactor": ["core", "compactor.py"],
+    "state_graph": ["core", "state_graph.py"],
+    "telemetry": ["core", "telemetry.py"],
+    "trace": ["core", "telemetry.py"],
+    "aci": ["core", "aci.py"],
+    "delegate": ["core", "delegation.py"],
+    "delegation": ["core", "delegation.py"]
 }
 
 def print_help():

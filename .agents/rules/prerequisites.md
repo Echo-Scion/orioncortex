@@ -8,37 +8,38 @@ version: 0.0.6
 
 To maintain a "plug and play" environment while avoiding brittle failures, this ecosystem relies on Graceful Fallbacks. If an advanced tool is unavailable on the host machine, the AI **MUST** gracefully degrade to native tools without halting.
 
-## 1. RTK (Rust Token Killer)
-- **Role**: Token-optimized CLI proxy for commands. Used specifically for **AST Hollowing** (`rtk read <file> --level aggressive`) to read large files without burning context.
-- **Prerequisite**: Installed globally via cargo or binary.
-- **Fallback**: If `rtk` commands fail (e.g., `command not found`), **immediately fallback to native tools**:
-  - Instead of `rtk read <file> --level aggressive`, use the native `grep_search` tool to find signatures, or `view_file` with narrow `startLine`/`endLine` parameters.
-  - Instead of `rtk grep`, use the native `grep_search` tool.
-
-## 2. Orion (Agent Memory & Brain Graph)
-- **Role**: Context syncing and knowledge indexing via the `orion.py` CLI.
-- **Prerequisite**: Python environment.
+## 1. Pillar 1: Python 3.10+ Stdlib (Orion Brain & Graph Engine)
+- **Role**: Primary orchestration layer, knowledge graph indexing, SQLite3 FTS5 BM25 search, state machine management, and DevSecOps verification.
+- **Prerequisite**: Python 3.10+ runtime installed on host machine. Zero-Pip Mandate enforced (no external heavy pip dependencies).
 - **Fallback Chain**:
-  1. **Primary**: Use the local python bridge: `python .agents/scripts/orion.py`.
-  2. **Fallback**: If Python fails entirely, use native `grep_search` on the `.orion/` or `.agents/` directories to find context manually.
+  1. **Primary**: Use local python CLI: `python .agents/scripts/orion.py <command>`.
+  2. **Fallback**: If Python environment is degraded, use native `grep_search` on `.orion/` or `.agents/` directories to locate context manually.
 
-## 3. Ollama (Local AI Coprocessor)
-- **Role**: Zero-cloud local embeddings, binary classification, and pre-distillation (`127.0.0.1:11434`).
-- **Prerequisite**: Local Ollama daemon running with designated lightweight models (e.g., Llama 3.2, Qwen 2.5, or Nomic embeddings).
+## 2. Pillar 2: Cargo Rust Systems Engine (`rtk` + `ast-grep`)
+- **Role**: Sub-millisecond terminal output compression (`rtk`) and polyglot Concrete Syntax Tree (CST) structural AST analysis (`ast-grep` / `sg`).
+- **Prerequisites**: Installed globally via cargo (`cargo install ast-grep --locked`) or standalone precompiled binaries in system PATH.
+- **Fallback Chain**:
+  - If `rtk` is missing or fails: Degrade immediately to native `view_file` with targeted line ranges or `grep_search` without output compression.
+  - If `ast-grep` is missing: Degrade to Python standard library `ast` for Python files, and regex-based AST signature extraction in `scanner.py` for Dart/TypeScript/Kotlin/Rust.
+
+## 3. Pillar 3: Ollama Local Neural Coprocessor
+- **Role**: Local zero-cloud vector embeddings (`nomic-embed-text`) and heuristic SLM evaluation (`127.0.0.1:11434`).
+- **Prerequisite**: Local Ollama daemon running on port 11434.
 - **Fallback Chain**:
   - If Ollama service is offline or unreachable:
-    - Automatically fallback to SQLite FTS5 BM25 lexical search inside `.orion/orion.db`.
+    - Automatically degrade to pure SQLite3 FTS5 BM25 lexical search inside `.orion/orion.db`.
     - Rely on native heuristic scanners and static AST parsers in `orion.py`. Zero disruption to coding workflow.
 
-## 4. Subagent Orchestration
-- **Role**: Using `invoke_subagent` or similar MCP tools to spawn isolated agents.
-- **Fallback**: If the `invoke_subagent` tool is not available in the current IDE environment (like Antigravity), handle the task yourself within the main thread, but aggressively use `grep_search` to keep your context window clean. Do not attempt to call missing tools.
-
-## 5. ast-grep (Polyglot Structural AST Engine)
-- **Role**: Concrete Syntax Tree (CST) structural search, linting, symbol extraction, and AST mutation across 20+ programming languages (Dart, TypeScript, Kotlin, Rust, Go, Python, Java, C++, Swift). Powers polyglot Repo-Mapping, structural code security scans, and mutation testing without regex fragility.
-- **Prerequisite**: Installed globally via cargo (`cargo install ast-grep --locked`) or standalone binary (`ast-grep` / `sg`).
+## 4. Pillar 4: Bun Static Runtime Engine (`bun` / `bun.exe`)
+- **Role**: Zero-compile direct execution of TypeScript/JSX, zero-install Model Context Protocol (MCP) server launching via `bun x -y <package>`, microsecond test execution (<4ms `bun test`) for mutation testing, and headless UI verification.
+- **Prerequisite**: Standalone static binary in PATH, `~/.bun/bin`, or `.agents/bin/bun.exe`. Zero global daemons, zero in-repo `node_modules`.
 - **Fallback Chain**:
-  - If `ast-grep` is not installed or command `ast-grep` / `sg` is unavailable:
-    1. For Python source files, immediately fallback to Python's native standard library `import ast` parser.
-    2. For non-Python files (Dart, TypeScript, Kotlin, Rust, Go), fallback gracefully to regex-based structural signature extraction in `scanner.py` and native `grep_search`. Zero disruption to coding workflow.
+  - If Bun binary is absent:
+    - MCP server runner degrades to system `npx` or pure Python stdio stdlib bridge (`bun_runtime.py`).
+    - Test execution falls back to host test runner (`pytest` or language test runner).
+    - UI verification falls back to static AST pattern scanning.
+
+## 5. Subagent Orchestration
+- **Role**: Spawning isolated sub-agents via `invoke_subagent` or MCP tools.
+- **Fallback**: If `invoke_subagent` is unavailable in the active runtime, execute tasks sequentially in the main thread with continuous execution and surgical file reads.
 

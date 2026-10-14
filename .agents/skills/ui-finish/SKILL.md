@@ -17,6 +17,8 @@ Enforces high-craft production UI paradigms (Linear, Raycast, Stripe) by rejecti
     - **Visual Craft Floor & Category Refusals**: `view_file .agents/skills/ui-finish/references/craft_floor.md`
     - **Aesthetic Archetypes & Design Systems**: `view_file .agents/skills/ui-finish/references/aesthetic_archetypes.md`
     - **Bento Grids & Asymmetric Macrostructures**: `view_file .agents/skills/ui-finish/references/bento_and_macrostructures.md`
+    - **Brief Inference & Three Dials**: `view_file .agents/skills/ui-finish/references/brief_inference_and_dials.md`
+    - **Iconography & Lucide Token Contracts**: `view_file .agents/skills/ui-finish/references/lucide_tokens.md`
 4. Search for theme/color definitions to maintain visual harmony.
 5. Check responsive layout usage to ensure responsiveness is preserved.
 6. **CI Gatekeeper**: Execute `python .agents/evals/audit_aesthetics.py --dir <target_path>` at the end of every UI task.

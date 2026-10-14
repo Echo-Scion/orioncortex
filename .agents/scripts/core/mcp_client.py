@@ -187,12 +187,32 @@ class StdioMCPClient:
         return None
 
 
+def resolve_server_command(args: List[str]) -> List[str]:
+    """Resolves server command, leveraging Bun (Pillar 4) for TypeScript/NPM MCP servers."""
+    if not args:
+        return args
+    first = args[0]
+    if first.startswith("@modelcontextprotocol/") or first.endswith((".ts", ".js", ".mjs")):
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        if script_dir not in sys.path:
+            sys.path.insert(0, script_dir)
+        try:
+            from bun_runtime import BunRuntimeEngine
+            bun = BunRuntimeEngine()
+            avail, _ = bun.is_available()
+            if avail:
+                return bun.get_mcp_spawn_command(first, args[1:])
+        except Exception as _e:
+            _log_telemetry(_e, "resolve_server_command:bun")
+    return args
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         print("Usage: python mcp_client.py <server_command> [args...]")
         sys.exit(1)
 
-    cmd = sys.argv[1:]
+    cmd = resolve_server_command(sys.argv[1:])
     client = StdioMCPClient(cmd)
     print(f"[MCP] Connecting to stdio server: {' '.join(cmd)}")
     if not client.start():

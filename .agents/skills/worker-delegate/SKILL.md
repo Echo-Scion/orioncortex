@@ -126,6 +126,9 @@ A coordinating agent must not stall execution or barrage the user with trivial s
    - External side-effect outside the workspace occurs (production release, unprompted network mutation).
    - Plan is fundamentally broken where every forward path is a blind guess.
 
+For full continuous execution details and ruling formats, refer to:
+`.agents/skills/worker-delegate/references/continuous_execution.md`
+
 ### 3. Result Collection
 Worker writes result to: `.agents/working/delegations/result-{task_id}.md`
 

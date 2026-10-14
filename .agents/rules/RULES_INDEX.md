@@ -26,6 +26,7 @@ This directory contains the core behavioral and operational constraints for the 
 | `memory-hygiene.md` | Rules for episodic memory compression and GraphRAG garbage collection. |
 | `fsm-protocol.md` | Formal State Machine execution tracking and crash recovery protocol. |
 | `prose-authenticity.md` | 54-pattern tell taxonomy, binary contrast reversals, and anti-slop documentation standards. |
+| `four-pillars-architecture.md` | Four (4) Permanently Anchored Pillars and hierarchical graceful degradation protocol. |
 
 ---
 *Policy: If a new rule is added, it MUST be indexed here and MUST include a frontmatter with `description` and `activation` tags.*

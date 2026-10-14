@@ -12,6 +12,7 @@ activation: when navigating the ecosystem or seeking an overview of agent capabi
 - **Formal State Machine**: `.agents/rules/fsm-protocol.md`
 - **Contradiction**: `.agents/rules/contradiction-protocol.md`
 - **Memory Hygiene**: `.agents/rules/memory-hygiene.md`
+- **Four Pillars Architecture**: `.agents/rules/four-pillars-architecture.md`
 
 ## 2. 🛠️ SKILLS (The 21 Domain Pillars)
 *Skills define deep domain knowledge, modular 3-tier architecture, and specialized personas.*
@@ -44,14 +45,18 @@ activation: when navigating the ecosystem or seeking an overview of agent capabi
 - **audit-ledger**: `.agents/skills/integrity-sentinel/references/audit-ledger.md` (Multi-session audit ledger tracking)
 - **auto-context**: `.agents/skills/session-offload/references/auto-context.md` (Organic Business Rule Extraction)
 - **bento-macrostructures**: `.agents/skills/ui-finish/references/bento_and_macrostructures.md` (Asymmetric layout blueprints & responsive grids)
+- **brief-inference-and-dials**: `.agents/skills/ui-finish/references/brief_inference_and_dials.md` (The Three Dials & brief inference engine from taste-skill)
+- **continuous-execution**: `.agents/skills/worker-delegate/references/continuous_execution.md` (Continuous execution & rulings not stalls from superpowers)
 - **craft-floor**: `.agents/skills/ui-finish/references/craft_floor.md` (The 12 visual craft floor rules & category default refusals)
 - **feature-sunset**: `.agents/skills/app-lifecycle/references/feature-sunset.md` (Phased feature deprecation & dead code purge)
 - **knowledge-extraction**: `.agents/skills/brain-graph/references/knowledge-extraction.md` (Graph triplet extraction from raw code)
 - **knowledge-sync**: `.agents/skills/meta-agent-admin/references/knowledge-sync.md` (Internal foundation doc update & version bump)
 - **lessword-compress**: `.agents/skills/lessword/references/lessword-compress.md` (Token reduction for memory files)
+- **lucide-tokens**: `.agents/skills/ui-finish/references/lucide_tokens.md` (Iconography metrics & Lucide token contracts)
 - **project-init**: `.agents/skills/app-lifecycle/references/project-init.md` (Root/sub-project unified initialization)
 - **project-migrate**: `.agents/skills/app-lifecycle/references/project-migrate.md` (Brownfield/Legacy onboarding)
 - **prose-authenticity**: `.agents/rules/prose-authenticity.md` (54-pattern tell taxonomy, binary contrast reversals & jargon purge)
+- **skill-inspector**: `.agents/skills/integrity-sentinel/references/skill_inspector.md` (Static & semantic skill audit rubric from SkillSpector)
 - **temporal-pulse**: `.agents/skills/self-evolve/references/temporal-pulse.md` (Activity-based session, milestone, and epoch synthesis)
 
 ## 3. 🚀 PROCEDURAL PLAYBOOKS (Modern Skills Architecture)
@@ -86,6 +91,7 @@ activation: when navigating the ecosystem or seeking an overview of agent capabi
 - **contradict**: `.agents/scripts/commands/contradict.py` (Predicate Collision)
 - **verify_agents**: `.agents/scripts/commands/verify_agents.py` (Mechanical & Security Verifier)
 - **audit_aesthetics**: `.agents/evals/audit_aesthetics.py` (Aesthetic, Craft & Contrast Evaluator)
+- **bun_runtime**: `.agents/scripts/core/bun_runtime.py` (Pillar 4 Bun Static Runtime Engine)
 
 ## 5. 📚 ARCHITECTURE & REFERENCE REGISTRIES
 *Curated protocol standards, domain taxonomies, and capability registries.*

@@ -550,14 +550,29 @@ def main() -> None:
         raw_args = sys.argv[3:] if first_arg == "mutate" else sys.argv[2:]
 
         mut_parser = argparse.ArgumentParser(description="Adversarial AST Mutation Testing Engine")
-        mut_parser.add_argument("--test", "--test-cmd", dest="test_cmd", required=True, help="Test command to run")
+        mut_parser.add_argument("--test", "--test-cmd", dest="test_cmd", required=True, help="Test command to run (or 'auto')")
+        mut_parser.add_argument("--runner", choices=["auto", "bun", "host"], default="auto", help="Test execution runner (Pillar 4 Bun or host CLI)")
         mut_parser.add_argument("--max-mutants", type=int, default=15, help="Maximum mutants to generate (default: 15)")
         mut_parser.add_argument("--threshold", type=float, default=80.0, help="Minimum mutation kill score %% (default: 80.0)")
         mut_parser.add_argument("--json", action="store_true", help="Output JSON report")
 
         parsed = mut_parser.parse_args(raw_args)
 
-        engine = AdversarialMutationEngine(parsed.test_cmd, target_file=target_file)
+        test_command = parsed.test_cmd
+        if (test_command == "auto" or parsed.runner == "bun") and target_file.endswith(('.ts', '.tsx', '.js', '.jsx')):
+            core_dir = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "core"))
+            if core_dir not in sys.path:
+                sys.path.insert(0, core_dir)
+            try:
+                from bun_runtime import BunRuntimeEngine
+                bun = BunRuntimeEngine()
+                avail, _ = bun.is_available()
+                if avail:
+                    test_command = f"{bun.bun_bin} test"
+            except Exception as _e:
+                _log_telemetry(_e, "adversarial:bun_runner_resolve")
+
+        engine = AdversarialMutationEngine(test_command, target_file=target_file)
         res = engine.run_mutation_cycle(
             target_file=target_file,
             max_mutants=parsed.max_mutants,
