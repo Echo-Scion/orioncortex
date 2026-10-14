@@ -22,12 +22,23 @@ To maintain a "plug and play" environment while avoiding brittle failures, this 
   1. **Primary**: Use the local python bridge: `python .agents/scripts/orion.py`.
   2. **Fallback**: If Python fails entirely, use native `grep_search` on the `.orion/` or `.agents/` directories to find context manually.
 
-## 3. Semantic Search (QMD / Local Rerankers)
-- **Role**: Node.js/npx based semantic search or local Ollama instances.
-- **Prerequisite**: Node.js, npx, enough GPU VRAM.
-- **Fallback**: If an `npx` command or an Ollama request fails (e.g., OOM error, timeout, command not found):
-  - **Fallback**: Rely exclusively on `grep_search` and manual file traversal (`list_dir`, `view_file`).
+## 3. Ollama (Local AI Coprocessor)
+- **Role**: Zero-cloud local embeddings, binary classification, and pre-distillation (`127.0.0.1:11434`).
+- **Prerequisite**: Local Ollama daemon running with designated lightweight models (e.g., Llama 3.2, Qwen 2.5, or Nomic embeddings).
+- **Fallback Chain**:
+  - If Ollama service is offline or unreachable:
+    - Automatically fallback to SQLite FTS5 BM25 lexical search inside `.orion/orion.db`.
+    - Rely on native heuristic scanners and static AST parsers in `orion.py`. Zero disruption to coding workflow.
 
 ## 4. Subagent Orchestration
 - **Role**: Using `invoke_subagent` or similar MCP tools to spawn isolated agents.
 - **Fallback**: If the `invoke_subagent` tool is not available in the current IDE environment (like Antigravity), handle the task yourself within the main thread, but aggressively use `grep_search` to keep your context window clean. Do not attempt to call missing tools.
+
+## 5. ast-grep (Polyglot Structural AST Engine)
+- **Role**: Concrete Syntax Tree (CST) structural search, linting, symbol extraction, and AST mutation across 20+ programming languages (Dart, TypeScript, Kotlin, Rust, Go, Python, Java, C++, Swift). Powers polyglot Repo-Mapping, structural code security scans, and mutation testing without regex fragility.
+- **Prerequisite**: Installed globally via cargo (`cargo install ast-grep --locked`) or standalone binary (`ast-grep` / `sg`).
+- **Fallback Chain**:
+  - If `ast-grep` is not installed or command `ast-grep` / `sg` is unavailable:
+    1. For Python source files, immediately fallback to Python's native standard library `import ast` parser.
+    2. For non-Python files (Dart, TypeScript, Kotlin, Rust, Go), fallback gracefully to regex-based structural signature extraction in `scanner.py` and native `grep_search`. Zero disruption to coding workflow.
+

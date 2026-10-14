@@ -23,9 +23,11 @@ Q2. Is the command interactive or does it require raw unfiltered JSON output? (e
     └── NO -> Use `rtk <cmd>` as default
 ```
 
-## 2. Execution Syntax
+## 2. Execution Syntax & Native Hook Interception
 
-Always prefix shell commands with `rtk` unless it hits the "NO" branch above.
+Antigravity natively intercepts commands via the `PreToolUse` lifecycle hook (`hooks.json` -> `rtk hook antigravity`), automatically rewriting commands like `git status` to `rtk git status`.
+
+Explicit `rtk` prefixing remains recommended practice for full transparency:
 
 ✅ **DO:**
 ```bash

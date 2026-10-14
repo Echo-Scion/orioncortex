@@ -55,11 +55,17 @@ CMD_MAP = {
     "rtk": ["core", "rtk_proxy.py"],
     "rtk_proxy": ["core", "rtk_proxy.py"],
     "adversarial": ["commands", "adversarial.py"],
+    "security": ["core", "security.py"],
+    "memory": ["core", "memory.py"],
+    "reflexion": ["core", "reflexion.py"],
+    "reflect": ["core", "reflexion.py"],
 
     "raw_ingest": ["commands", "raw_ingest.py"],
     "consolidate": ["commands", "consolidate.py"],
     "contradict": ["commands", "contradict.py"],
     "fsm": ["commands", "state_machine.py"],
+    "shrink": ["commands", "shrink.py"],
+    "distill": ["commands", "distill.py"],
     "eval": ["..", "evals", "audit_aesthetics.py"],
     "contrast": ["..", "evals", "audit_aesthetics.py"]
 }

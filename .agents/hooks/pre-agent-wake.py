@@ -13,13 +13,21 @@ import time
 import argparse
 import sys
 
+import threading
+import queue
+
+def _log_telemetry(err: Exception, context: str = "") -> None:
+    """Non-fatal telemetry catch for degraded operations."""
+    if os.environ.get("ORION_DEBUG"):
+        msg = f": {err}" if err else ""
+        sys.stderr.write(f"[ORION_TELEMETRY] Non-fatal catch in {context}{msg}\n")
+
 if hasattr(sys.stdout, 'reconfigure'):
     try:
         sys.stdout.reconfigure(encoding='utf-8')
         sys.stderr.reconfigure(encoding='utf-8')
-    except Exception:
-        pass
-
+    except Exception as _e:
+        _log_telemetry(_e, "stdout_reconfigure")
 
 # Add modules directory to path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -35,6 +43,27 @@ CONTEXT_DIR = os.path.join(BASE_DIR, '.orion', 'working')
 CONTEXT_FILE = os.path.join(CONTEXT_DIR, 'context.json')
 WORKSPACE_DIR = BASE_DIR
 
+def _read_stdin_nonblocking(timeout: float = 0.05) -> dict:
+    q = queue.Queue()
+    def _worker():
+        try:
+            raw = sys.stdin.read().strip()
+            if raw:
+                q.put(raw)
+        except Exception as _err:
+            _log_telemetry(_err, "stdin_worker_read")
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+    t.join(timeout)
+    if not q.empty():
+        raw_str = q.get_nowait()
+        if raw_str:
+            try:
+                return json.loads(raw_str)
+            except Exception as _err:
+                _log_telemetry(_err, "stdin_json_loads")
+    return {}
+
 def main():
     parser = argparse.ArgumentParser(description="Omni-Buffer Hook for AI Agents")
     parser.add_argument("--active-file", type=str, default="", help="Path to the currently active file in the IDE")
@@ -44,7 +73,15 @@ def main():
     parser.add_argument("--hook", action="store_true", help="Run in hook mode outputting valid JSON payload")
     
     args = parser.parse_args()
-    
+
+    hook_payload = _read_stdin_nonblocking() if args.hook else {}
+    conversation_id = hook_payload.get("conversationId")
+    transcript_path = hook_payload.get("transcriptPath")
+    artifact_directory_path = hook_payload.get("artifactDirectoryPath")
+    model_name = hook_payload.get("modelName")
+    invocation_num = hook_payload.get("invocationNum")
+    workspace_paths = hook_payload.get("workspacePaths", [])
+
     if not os.path.exists(CONTEXT_DIR):
         os.makedirs(CONTEXT_DIR)
         
@@ -82,12 +119,20 @@ def main():
         "active_file": args.active_file,
         "terminal_error": sanitize_input(args.terminal_error),
         "user_intent": sanitize_input(args.user_intent),
-        "ide_source": args.ide_source,
+        "ide_source": args.ide_source if args.ide_source != "unknown" else ("antigravity" if hook_payload else "unknown"),
         "evolution_overdue": evolution_overdue,
         "unprocessed_learnings": unprocessed_learnings,
         "identity_path": os.path.relpath(identity_path, WORKSPACE_DIR).replace(os.sep, '/') if identity_exists else None,
         "top_lessons": top_lessons,
-        "drift_warnings": drift_warnings
+        "drift_warnings": drift_warnings,
+        "antigravity": {
+            "conversation_id": conversation_id,
+            "transcript_path": transcript_path,
+            "artifact_directory_path": artifact_directory_path,
+            "model_name": model_name,
+            "invocation_num": invocation_num,
+            "workspace_paths": workspace_paths
+        } if hook_payload else None
     }
     
     if recovery_instruction:
@@ -99,7 +144,16 @@ def main():
     os.replace(temp_file, CONTEXT_FILE)
         
     if args.hook:
-        print("{}")
+        if recovery_instruction:
+            print(json.dumps({
+                "injectSteps": [
+                    {
+                        "ephemeralMessage": recovery_instruction
+                    }
+                ]
+            }))
+        else:
+            print("{}")
     else:
         print(f"[OK] Omni-Buffer updated at {os.path.relpath(CONTEXT_FILE, WORKSPACE_DIR)}")
 

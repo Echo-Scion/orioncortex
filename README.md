@@ -216,6 +216,7 @@ This foundation synthesizes principles from top open-source optimization tools:
 - **[rtk-ai/rtk](https://github.com/rtk-ai/rtk)**: (Active Binary) Compresses and filters verbose terminal output.
 - **[JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman)**: (Protocol) Telegraphic communication mapping for token reduction.
 - **[morluto/rea](https://github.com/morluto/rea)**: (Protocol) Reverse engineering architecture, evidence-quad deduction, and binary-to-code clean-room reconstruction.
+- **[Obsidian](https://obsidian.md)** & **[kepano/obsidian-skills](https://github.com/kepano/obsidian-skills)**: (Concept & Vault Interop) Source of graph-view knowledge mapping, `[[wikilinks]]` Second Brain convention, and interactive vault visualization supported natively via `.orion` export (`python .agents/scripts/orion.py memory export-vault`).
 
 
 ---

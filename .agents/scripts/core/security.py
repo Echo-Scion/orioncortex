@@ -15,7 +15,22 @@ import sys
 import json
 import hashlib
 import unicodedata
+import shutil
+import subprocess
 from typing import List, Dict, Any, Optional, Set, Tuple
+
+def _log_telemetry(err: Exception, context: str = "") -> None:
+    """Non-fatal telemetry catch for degraded operations."""
+    if os.environ.get("ORION_DEBUG"):
+        msg = f": {err}" if err else ""
+        sys.stderr.write(f"[ORION_TELEMETRY] Non-fatal catch in {context}{msg}\n")
+
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception as _e:
+        _log_telemetry(_e, 'security.py:reconfigure')
 
 # Bidi Trojan Source and Zero-Width characters
 BIDI_CHARS = {
@@ -91,6 +106,74 @@ DANGEROUS_DESERIALIZATION_SINKS = {
 }
 
 SAFE_YAML_LOADERS = {"SafeLoader", "CSafeLoader", "BaseLoader"}
+
+def find_ast_grep() -> Optional[str]:
+    """
+    Locates ast-grep (sg) binary on system PATH or Cargo toolchain bin directory.
+    Returns absolute path if found, or None if absent.
+    """
+    for name in ['sg', 'ast-grep', 'sg.exe', 'ast-grep.exe']:
+        path = shutil.which(name)
+        if path and os.path.exists(path):
+            return path
+
+    cargo_bin = os.path.expanduser('~/.cargo/bin')
+    if os.path.isdir(cargo_bin):
+        for name in ['sg.exe', 'ast-grep.exe', 'sg', 'ast-grep']:
+            cand = os.path.join(cargo_bin, name)
+            if os.path.isfile(cand):
+                return cand
+    return None
+
+
+class CanaryDefense:
+    """
+    Prompt injection & instruction exfiltration defense.
+    Inspired by protectai/rebuff to detect unauthorized prompt leaks.
+    """
+    @staticmethod
+    def generate_token(salt: str = "orion") -> str:
+        raw = f"{salt}:{os.urandom(16).hex()}"
+        return f"CANARY_{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]}"
+
+    @staticmethod
+    def inject(prompt: str, token: str) -> str:
+        return f"<!-- CANARY_PROBE: {token} -->\n{prompt}"
+
+    @staticmethod
+    def detect_leaks(text: str, tokens: List[str]) -> List[str]:
+        leaks = []
+        for t in tokens:
+            if t in text:
+                leaks.append(t)
+        return leaks
+
+
+# Polyglot AST/Regex Security Signatures for non-Python sources
+POLYGLOT_SECURITY_PATTERNS: Dict[Tuple[str, ...], List[Tuple[Any, str, str, str]]] = {
+    ('.dart',): [
+        (re.compile(r'(?i)\b(?:rawQuery|rawInsert|rawUpdate|rawDelete|execute)\s*\(\s*[\'"][^\'"]*\$'), 'AST_SQL_INJECTION', 'SQL query with direct string interpolation (use parameterized ? arguments)', 'HIGH'),
+        (re.compile(r'(?i)badCertificateCallback\s*:\s*\([^)]*\)\s*=>\s*true'), 'AST_INSECURE_NETWORK', 'Unpinned SSL certificate acceptance in HttpClient', 'CRITICAL'),
+        (re.compile(r'(?i)Process\.(?:run|start)\s*\([^,]+,\s*\[?[^\]]*\b(?:sh|bash|cmd|powershell)\b'), 'AST_COMMAND_INJECTION', 'Shell command execution via Dart Process API', 'HIGH'),
+    ],
+    ('.ts', '.js', '.tsx', '.jsx', '.mjs', '.cjs'): [
+        (re.compile(r'(?i)(?<![a-zA-Z0-9_.])eval\s*\('), 'AST_DYNAMIC_CODE_EXEC', 'Dynamic code execution via eval()', 'CRITICAL'),
+        (re.compile(r'(?i)new\s+Function\s*\('), 'AST_DYNAMIC_CODE_EXEC', 'Dynamic code execution via new Function()', 'HIGH'),
+        (re.compile(r'(?i)child_process\.(?:exec|execSync)\s*\('), 'AST_COMMAND_INJECTION', 'Raw shell command execution via child_process.exec()', 'HIGH'),
+        (re.compile(r'(?i)\binnerHTML\s*=\s*(?![\'"`]<)'), 'AST_XSS_SINK', 'Dynamic innerHTML assignment without sanitization', 'HIGH'),
+    ],
+    ('.kt', '.java'): [
+        (re.compile(r'(?i)Runtime\.getRuntime\(\)\.exec\s*\('), 'AST_COMMAND_INJECTION', 'Command execution via Runtime.getRuntime().exec()', 'HIGH'),
+        (re.compile(r'(?i)ProcessBuilder\s*\([^)]*\b(?:sh|cmd|bash)\b'), 'AST_COMMAND_INJECTION', 'Shell invocation via ProcessBuilder', 'HIGH'),
+    ],
+    ('.go',): [
+        (re.compile(r'(?i)exec\.Command\s*\(\s*"(?:sh|bash|cmd|powershell)"'), 'AST_COMMAND_INJECTION', 'Shell command execution via Go os/exec', 'HIGH'),
+    ],
+    ('.rs',): [
+        (re.compile(r'(?i)\bCommand::new\s*\(\s*"(?:sh|bash|cmd|powershell)"'), 'AST_COMMAND_INJECTION', 'Shell command execution via std::process::Command', 'HIGH'),
+        (re.compile(r'(?i)\bunsafe\s*\{'), 'AST_UNSAFE_BLOCK', 'Unsafe Rust block requires explicit safety documentation', 'MEDIUM'),
+    ],
+}
 
 
 class ASTSecurityVisitor(ast.NodeVisitor):
@@ -561,6 +644,22 @@ class SecurityAuditor:
             except SyntaxError:
                 pass  # Ignore template files or incomplete snippets
 
+        # 4. Polyglot Source Code Vulnerability Scan (Dart, TS, JS, Kotlin, Java, Go, Rust)
+        ext = os.path.splitext(filepath)[1].lower()
+        for exts, patterns in POLYGLOT_SECURITY_PATTERNS.items():
+            if ext in exts:
+                for line_num, line in enumerate(lines, 1):
+                    for pattern, cat, msg, sev in patterns:
+                        if pattern.search(line):
+                            findings.append({
+                                'file': filepath,
+                                'line': line_num,
+                                'category': cat,
+                                'severity': sev,
+                                'message': msg,
+                                'snippet': line.strip()
+                            })
+
         return findings
 
     def audit_directory(self, target_dir: Optional[str] = None, exclude_dirs: Optional[Set[str]] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -573,7 +672,7 @@ class SecurityAuditor:
         all_active: List[Dict[str, Any]] = []
         all_suppressed: List[Dict[str, Any]] = []
 
-        valid_exts = ('.py', '.md', '.json', '.yaml', '.yml', '.txt', '.js', '.ts', '.dart')
+        valid_exts = ('.py', '.md', '.json', '.yaml', '.yml', '.txt', '.js', '.ts', '.tsx', '.jsx', '.dart', '.kt', '.java', '.go', '.rs')
 
         for root, dirs, files in os.walk(target_dir):
             dirs[:] = [d for d in dirs if d not in exclude_dirs and not d.startswith('.git')]
@@ -590,3 +689,71 @@ class SecurityAuditor:
                             all_active.append(item)
 
         return all_active, all_suppressed
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Native Security & Polyglot AST Integrity Engine")
+    parser.add_argument("dir", nargs="?", default=".", help="Directory to audit (default: .)")
+    parser.add_argument("--baseline", help="Custom baseline file path")
+    parser.add_argument("--record-baseline", action="store_true", help="Save active findings to baseline file")
+    parser.add_argument("--json", action="store_true", help="Output results in JSON format")
+    parser.add_argument("--canary-probe", help="Verify if response text leaks prompt canary tokens")
+    args = parser.parse_args()
+
+    if args.canary_probe:
+        if os.path.isfile(args.canary_probe):
+            with open(args.canary_probe, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            leaks = re.findall(r'CANARY_[a-f0-9]{16}', content)
+            if leaks:
+                print(f"[CRITICAL] Canary leak detected! Found tokens: {leaks}")
+                sys.exit(1)
+            else:
+                print("[PASS] Zero canary token leaks detected.")
+                sys.exit(0)
+
+    target_dir = os.path.abspath(args.dir)
+    auditor = SecurityAuditor(target_dir, baseline_file=args.baseline)
+    active, suppressed = auditor.audit_directory()
+
+    if args.record_baseline:
+        auditor.baseline.save(active, auditor.root_dir)
+        print(f"[BASELINE] Recorded {len(active)} findings to {auditor.baseline_path}")
+        sys.exit(0)
+
+    sg_bin = find_ast_grep()
+    sg_status = f"ast-grep binary active ({sg_bin})" if sg_bin else "ast-grep optional binary absent (using native AST/regex engine)"
+
+    if args.json:
+        print(json.dumps({
+            "target": target_dir,
+            "engine": sg_status,
+            "active_findings": active,
+            "suppressed_count": len(suppressed),
+            "verdict": "REJECT" if any(f.get('severity') == 'CRITICAL' for f in active) else ("CAUTION" if active else "APPROVE")
+        }, indent=2))
+        sys.exit(1 if active else 0)
+
+    print(f"\n🛡️ Security & Integrity Audit: {target_dir}")
+    print("=" * 60)
+    print(f"Engine          : {sg_status}")
+    print(f"Active Findings : {len(active)}")
+    print(f"Suppressed      : {len(suppressed)} baselined items\n")
+
+    if active:
+        for idx, item in enumerate(active, 1):
+            sev = item.get('severity', 'HIGH')
+            print(f"[{idx}] [{sev}] {item.get('category')}: {item.get('message')}")
+            print(f"     File: {item.get('file')}:{item.get('line', '?')}")
+            if item.get('snippet'):
+                print(f"     Code: {item.get('snippet')}")
+        print("\n[FAIL] Security violations detected.")
+        sys.exit(1)
+    else:
+        print("[PASS] Security & Polyglot AST Integrity Verified: 0 vulnerabilities found.")
+        sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

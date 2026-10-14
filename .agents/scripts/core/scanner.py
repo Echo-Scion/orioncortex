@@ -150,6 +150,10 @@ def cmd_map(args):
     except Exception as _e:
         _log_telemetry(_e, 'scanner.py:143')
 
+    if getattr(args, 'ranked', False):
+        cmd_repomap(args)
+        return
+
     def build_tree(current_dir, current_depth):
         if current_depth > args.max_depth:
             return
@@ -176,8 +180,236 @@ def cmd_map(args):
                     for line in skeleton:
                         print(f"{'  ' * (current_depth + 1)}│ {line}")
 
-    print(f"📦 Code Map for: {os.path.abspath(args.dir)}\\n")
+    print(f"📦 Code Map for: {os.path.abspath(args.dir)}\n")
     build_tree(args.dir, 0)
+
+# === PAGERANK REPO MAP ENGINE (AIDER PARADIGM) ===
+
+def extract_file_symbols(file_path):
+    """
+    Extracts definitions and references from a source file.
+    Uses Python AST for .py files, and structural regex for others.
+    Returns: (defines_dict, references_set)
+    """
+    defines = {}
+    references = set()
+    ext = os.path.splitext(file_path)[1].lower()
+
+    if ext == ".py":
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+            import ast
+            tree = ast.parse(content, filename=file_path)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    defines.setdefault(node.name, []).append((node.lineno, f"class {node.name}"))
+                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    prefix = "async def " if isinstance(node, ast.AsyncFunctionDef) else "def "
+                    args_list = [a.arg for a in node.args.args]
+                    arg_str = ", ".join(args_list[:4])
+                    if len(args_list) > 4:
+                        arg_str += ", ..."
+                    defines.setdefault(node.name, []).append((node.lineno, f"{prefix}{node.name}({arg_str})"))
+                elif isinstance(node, ast.Name):
+                    if isinstance(node.ctx, ast.Load):
+                        references.add(node.id)
+                elif isinstance(node, ast.Attribute):
+                    if isinstance(node.ctx, ast.Load):
+                        references.add(node.attr)
+            return defines, references
+        except Exception as _e:
+            _log_telemetry(_e, "extract_file_symbols_py")
+
+    patterns = [
+        (re.compile(r'^\s*(?:export\s+)?(?:abstract\s+)?(?:class|struct|interface|trait|enum)\s+([A-Za-z0-9_]+)', re.MULTILINE), "class"),
+        (re.compile(r'^\s*(?:export\s+)?(?:async\s+)?(?:def|fn|function)\s+([A-Za-z0-9_]+)\s*\(', re.MULTILINE), "func"),
+        (re.compile(r'^\s*(?:@\w+\s+)*(?:public|private|protected|static|final|abstract|\s)*(?:[A-Za-z0-9_<>\[\],\s]+)\s+([A-Za-z0-9_]+)\s*\((.*?)\)\s*(?:async\*?|sync\*?)?\s*[{=>]', re.MULTILINE), "method"),
+    ]
+
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
+        content = "".join(lines)
+        tokens = re.findall(r'\b[A-Za-z_][A-Za-z0-9_]{2,}\b', content)
+        references.update(tokens)
+
+        for line_num, line in enumerate(lines, 1):
+            for pat, _ in patterns:
+                m = pat.match(line)
+                if m:
+                    sym_name = m.group(1).strip()
+                    if sym_name in {"if", "for", "while", "switch", "catch", "return", "else", "import", "from"}:
+                        continue
+                    sig = line.strip().rstrip('{:').strip()
+                    defines.setdefault(sym_name, []).append((line_num, sig))
+                    references.discard(sym_name)
+                    break
+    except Exception as _e:
+        _log_telemetry(_e, "extract_file_symbols_polyglot")
+
+    return defines, references
+
+
+def pagerank(graph, damping=0.85, max_iter=100, tol=1e-6, personalization=None):
+    """
+    Computes PageRank over a directed graph using power iteration.
+    Pure Python standard library implementation.
+    """
+    nodes = list(graph.keys())
+    N = len(nodes)
+    if N == 0:
+        return {}
+
+    if personalization:
+        tot = sum(personalization.values())
+        p_vec = {n: personalization.get(n, 0) / tot if tot > 0 else 1.0 / N for n in nodes}
+    else:
+        p_vec = {n: 1.0 / N for n in nodes}
+
+    ranks = {n: 1.0 / N for n in nodes}
+
+    for _ in range(max_iter):
+        prev = dict(ranks)
+        diff = 0.0
+        dangling_sum = sum(prev[n] for n in nodes if not graph[n])
+
+        for node in nodes:
+            incoming = 0.0
+            for src, edges in graph.items():
+                if node in edges:
+                    src_out_weight = sum(edges.values())
+                    if src_out_weight > 0:
+                        incoming += prev[src] * (edges[node] / src_out_weight)
+            ranks[node] = (1.0 - damping) * p_vec[node] + damping * (incoming + dangling_sum * p_vec[node])
+            diff += abs(ranks[node] - prev[node])
+
+        if diff < tol:
+            break
+
+    return ranks
+
+
+def build_repo_map(target_dir, valid_exts=None, ignore_dirs=None, budget_tokens=1024, focus=None):
+    """
+    Builds a PageRank-ranked repository map constrained by a token budget.
+    Implements the core Aider Repo-Map algorithm in pure Python stdlib.
+    """
+    if valid_exts is None:
+        valid_exts = {".dart", ".ts", ".js", ".py", ".go", ".rs", ".swift", ".java", ".kt"}
+    if ignore_dirs is None:
+        ignore_dirs = {"node_modules", "build", "dist", "coverage", ".git", "ios", "android", "__pycache__", "scratch", ".orion", ".gemini", ".dart_tool"}
+
+    file_paths = []
+    for root, dirs, files in os.walk(target_dir):
+        dirs[:] = [d for d in dirs if d not in ignore_dirs and not d.startswith('.')]
+        for f in files:
+            ext = os.path.splitext(f)[1].lower()
+            if ext in valid_exts:
+                file_paths.append(os.path.join(root, f))
+
+    if not file_paths:
+        return {"ranked_files": [], "repo_map": "(No matching code files found)", "total_tokens": 0, "total_files_indexed": 0}
+
+    file_defines = {}
+    file_references = {}
+    symbol_definers = {}
+
+    for fp in file_paths:
+        rel_p = os.path.relpath(fp, target_dir).replace("\\", "/")
+        defs, refs = extract_file_symbols(fp)
+        file_defines[rel_p] = defs
+        file_references[rel_p] = refs
+        for sym in defs:
+            symbol_definers.setdefault(sym, set()).add(rel_p)
+
+    graph = {rel_p: {} for rel_p in file_defines}
+
+    for ref_file, refs in file_references.items():
+        for ident in refs:
+            if ident in symbol_definers:
+                for def_file in symbol_definers[ident]:
+                    if def_file != ref_file:
+                        graph[ref_file][def_file] = graph[ref_file].get(def_file, 0.0) + 1.0
+
+    for rel_p in graph:
+        graph[rel_p][rel_p] = graph[rel_p].get(rel_p, 0.0) + 0.1
+
+    pers = {}
+    if focus:
+        focus_set = set(f.lower().replace("\\", "/") for f in focus)
+        for rel_p in graph:
+            if any(fc in rel_p.lower() for fc in focus_set):
+                pers[rel_p] = 10.0
+            elif any(fc in [s.lower() for s in file_defines[rel_p]] for fc in focus_set):
+                pers[rel_p] = 5.0
+
+    scores = pagerank(graph, personalization=pers if pers else None)
+    sorted_files = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+
+    budget_chars = budget_tokens * 4
+    output_lines = []
+    current_chars = 0
+    ranked_files_meta = []
+
+    for rel_p, score in sorted_files:
+        defs = file_defines[rel_p]
+        if not defs and score <= (1.0 / len(file_paths)):
+            continue
+
+        file_header = f"\n📄 {rel_p} (rank: {score:.4f})"
+        lines_for_file = [file_header]
+
+        all_defs = []
+        for sym, occurrences in defs.items():
+            for line_no, sig in occurrences:
+                all_defs.append((line_no, sig))
+        all_defs.sort(key=lambda x: x[0])
+
+        for line_no, sig in all_defs:
+            lines_for_file.append(f"  │ Line {line_no:4d}: {sig}")
+
+        block_str = "\n".join(lines_for_file)
+        if current_chars + len(block_str) > budget_chars and output_lines:
+            break
+
+        output_lines.append(block_str)
+        current_chars += len(block_str)
+        ranked_files_meta.append({
+            "file": rel_p,
+            "rank": round(score, 5),
+            "definitions_count": len(all_defs)
+        })
+
+    repo_map_str = "\n".join(output_lines).strip()
+    est_tokens = len(repo_map_str) // 4
+
+    return {
+        "ranked_files": ranked_files_meta,
+        "repo_map": repo_map_str,
+        "total_tokens": est_tokens,
+        "total_files_indexed": len(file_paths)
+    }
+
+
+def cmd_repomap(args):
+    target_dir = getattr(args, 'dir', '.')
+    budget = getattr(args, 'budget', 1024)
+    focus = getattr(args, 'focus', None)
+
+    if not os.path.isdir(target_dir):
+        print(f"Error: {target_dir} is not a valid directory.", file=sys.stderr)
+        sys.exit(1)
+
+    result = build_repo_map(target_dir, budget_tokens=budget, focus=focus)
+
+    if getattr(args, 'json', False):
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"🗺️ PageRank Repo-Map (Budget: {budget} tokens, Indexed: {result['total_files_indexed']} files, Output: ~{result['total_tokens']} tokens)")
+        print("=" * 70)
+        print(result["repo_map"])
+
 
 # === TOKEN AUDIT ===
 
@@ -293,6 +525,16 @@ def main():
     parser_map = subparsers.add_parser("map", help="Generate a structural code map of the directory")
     parser_map.add_argument("dir", nargs="?", default=".", help="Directory to map (default: .)")
     parser_map.add_argument("--max-depth", type=int, default=5, help="Maximum directory depth")
+    parser_map.add_argument("--ranked", action="store_true", help="Rank code map using PageRank symbol topology (Aider Repo-Map)")
+    parser_map.add_argument("--budget", type=int, default=1024, help="Token budget for ranked map (default: 1024)")
+    parser_map.add_argument("--focus", nargs="+", help="Files or symbols to personalize/focus PageRank on")
+
+    # RepoMap (PageRank-ranked code map)
+    parser_repomap = subparsers.add_parser("repomap", help="Generate a PageRank-ranked repository map within a token budget")
+    parser_repomap.add_argument("dir", nargs="?", default=".", help="Directory to map (default: .)")
+    parser_repomap.add_argument("--budget", type=int, default=1024, help="Maximum token budget for the map (default: 1024)")
+    parser_repomap.add_argument("--focus", nargs="+", help="Files or symbols to personalize/focus PageRank on")
+    parser_repomap.add_argument("--json", action="store_true", help="Output in raw JSON format")
     
     # Tokens
     parser_tokens = subparsers.add_parser("tokens", help="Audit token consumption across the directory")
@@ -311,6 +553,8 @@ def main():
         cmd_targets(parser.parse_args())
     elif args.command == "map":
         cmd_map(parser.parse_args())
+    elif args.command == "repomap":
+        cmd_repomap(parser.parse_args())
     elif args.command == "tokens":
         cmd_tokens(parser.parse_args())
     elif args.command == "security":

@@ -20,6 +20,11 @@ When modifying any file inside `.agents/` (e.g., adding a new rule or modifying 
 4. **Revert on Failure**: If the script returns an error (e.g., broken link, security finding, missing frontmatter), you must fix or revert the change immediately. Do not ignore the verifier output.
 
 ## Ecosystem Principles
+- **The Trinity Stack Mandate (Strict Prerequisites)**: All framework components, tools, and ingested skills must strictly align with the Trinity architecture:
+  1. **Python 3 (Pure Standard Library)**: The universal core runtime for scripts, hooks, and linters (`re`, `ast`, `sqlite3`, `hashlib`, `urllib`). Zero mandatory `pip` packages.
+  2. **Cargo / Rust**: The native high-performance layer for zero-latency CLI proxying and token hollowing (`rtk`).
+  3. **Ollama**: The local LLM coprocessor for offline embeddings, binary classification, and pre-distillation (`127.0.0.1:11434`).
+  *FORBIDDEN*: Introducing external Go runtimes, Node.js/npm dependencies, C++ compiler toolchains, or heavy background HTTP daemons. Any absorbed capability from such runtimes must be re-engineered into Python stdlib or Cargo Rust.
 - **Modularity vs Cohesion (Critical Evaluation)**: Do not blindly separate files. 59 files are better for JIT loading (Skills/Rules), BUT core engine components (like `brain.py`) demand cohesion. Always evaluate: *Does separating this script cause unnecessary bash overhead and fragment the core memory engine?* If yes, merge it.
 - **Algorithmic Instruction**: Never write "cosmetic" rules like "Don't do X". Always write actionable rules: "Run script X to verify Y" or "Use this exact code template Z".
 
