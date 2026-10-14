@@ -224,7 +224,8 @@ class ContextPacker:
         target_dir: Optional[str] = None,
         max_files: int = 500,
         allowed_extensions: Optional[Set[str]] = None,
-        max_size_bytes: int = 1048576
+        max_size_bytes: int = 1048576,
+        prioritize_salience: bool = False
     ) -> List[str]:
         base = os.path.abspath(target_dir or self.root_dir)
         exts = allowed_extensions or DEFAULT_TEXT_EXTENSIONS
@@ -251,14 +252,25 @@ class ContextPacker:
 
                     collected.append(rel_file)
                     if len(collected) >= max_files:
-                        return collected
+                        break
+
+        if prioritize_salience:
+            try:
+                from core.scanner import build_repo_map
+                rm_res = build_repo_map(self.root_dir, budget_tokens=5000)
+                rank_lookup = {rf["file"]: rf["rank"] for rf in rm_res.get("ranked_files", [])}
+                collected.sort(key=lambda f: rank_lookup.get(f, 0.0), reverse=True)
+            except Exception as _e:
+                _log_telemetry(_e, "collect_files:prioritize_salience")
+
         return collected
 
     def pack_xml(
         self,
         files: List[str],
         max_tokens: int = 100000,
-        scrub_secrets: bool = True
+        scrub_secrets: bool = True,
+        repomap: Optional[str] = None
     ) -> Dict[str, Any]:
         """Packs collected files into an XML envelope according to Repomix schema."""
         tree_lines = generate_ascii_tree(self.root_dir, max_depth=3, ignore_filter=self.gi)
@@ -271,7 +283,8 @@ class ContextPacker:
         file_blocks = []
         
         # Base metadata overhead estimate
-        running_tokens = estimate_tokens(tree_block) + 50
+        repomap_tok = estimate_tokens(repomap) + 20 if repomap else 0
+        running_tokens = estimate_tokens(tree_block) + 50 + repomap_tok
 
         for rel_p in files:
             full_p = os.path.join(self.root_dir, rel_p)
@@ -313,6 +326,10 @@ class ContextPacker:
             tree_block,
             "  </directory_structure>"
         ]
+        if repomap:
+            envelope_chunks.append("  <repository_map>")
+            envelope_chunks.append(repomap)
+            envelope_chunks.append("  </repository_map>")
         envelope_chunks.extend(file_blocks)
         envelope_chunks.append("</repository_context>")
         full_text = "\n".join(envelope_chunks)
@@ -402,12 +419,24 @@ def main() -> None:
     parser.add_argument("--max-size-kb", type=int, default=1024, help="Maximum file size in KB to inspect")
     parser.add_argument("--out", "--output", dest="out", help="Optional output destination file")
     parser.add_argument("--redact", action="store_true", default=True, help="Scrub secrets in packed content")
+    parser.add_argument("--repomap", action="store_true", help="Include PageRank-ranked repository map in envelope")
+    parser.add_argument("--salience", action="store_true", help="Prioritize files by PageRank salience score")
     args = parser.parse_args()
 
     packer = ContextPacker(args.dir)
-    files = packer.collect_files(max_size_bytes=args.max_size_kb * 1024)
+    files = packer.collect_files(max_size_bytes=args.max_size_kb * 1024, prioritize_salience=args.salience)
+    
+    repomap_str = None
+    if args.repomap:
+        try:
+            from core.scanner import build_repo_map
+            rm_data = build_repo_map(args.dir, budget_tokens=min(args.budget // 4, 3000))
+            repomap_str = rm_data.get("repo_map", "")
+        except Exception as _e:
+            _log_telemetry(_e, "main:build_repo_map")
+
     if args.format == "xml":
-        res = packer.pack_xml(files, max_tokens=args.budget, scrub_secrets=args.redact)
+        res = packer.pack_xml(files, max_tokens=args.budget, scrub_secrets=args.redact, repomap=repomap_str)
         out_content = res["envelope"]
         summary = f"[PACKER] Packed {res['packed_files_count']} files (~{res['estimated_tokens']} tokens, {len(res['secret_alerts'])} secret alerts)"
     else:

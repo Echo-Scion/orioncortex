@@ -93,7 +93,10 @@ CMD_MAP = {
     "skills": ["core", "skill_library.py"],
     "compile_ast": ["core", "semgrep_compiler.py"],
     "semgrep": ["core", "semgrep_compiler.py"],
-    "scip": ["core", "scip.py"]
+    "scip": ["core", "scip.py"],
+    "repomap": ["core", "scanner.py"],
+    "graph": ["core", "orion_graph.py"],
+    "orion_graph": ["core", "orion_graph.py"]
 }
 
 
