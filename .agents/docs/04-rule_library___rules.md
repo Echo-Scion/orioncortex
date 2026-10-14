@@ -73,7 +73,7 @@
 - 5-State UI validation requirements.
 - Zero-fluff instruction formatting.
 
-### 9.9. `standards/fsm-protocol.md`
+### 9.9. `fsm-protocol.md`
 **Formal State Machine Protocol.**
 - Enforces state separation between static context (`context.json`) and active execution state (`execution_state.json`).
 - Prevents spatial and task loss during unexpected IDE restarts.
@@ -94,8 +94,8 @@ Specific rules for RTK integration in the Antigravity IDE. Decision tree and com
 ### 9.12. `RULES_INDEX.md`
 Compiled index of all rules. Parsed by NanoBrain for fast filtering during JIT routing.
 
-### 9.13. `rules/local/` (Sub-directory)
-Place for project-specific rules that override global rules. Empty in `_foundation`.
+### 9.13. `prose-authenticity.md`
+Standards for anti-slop documentation, eliminating AI structural tells, binary contrast reversals, and jargon purge.
 
 ---
 

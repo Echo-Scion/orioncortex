@@ -24,6 +24,8 @@ This directory contains the core behavioral and operational constraints for the 
 | `.agents/skills/app-lifecycle/SKILL.md` | Crash-proof formal state machine protocol for multi-step tasks. |
 | `contradiction-protocol.md` | Protocol for resolving colliding predicates and rule conflicts. |
 | `memory-hygiene.md` | Rules for episodic memory compression and GraphRAG garbage collection. |
+| `fsm-protocol.md` | Formal State Machine execution tracking and crash recovery protocol. |
+| `prose-authenticity.md` | 54-pattern tell taxonomy, binary contrast reversals, and anti-slop documentation standards. |
 
 ---
 *Policy: If a new rule is added, it MUST be indexed here and MUST include a frontmatter with `description` and `activation` tags.*

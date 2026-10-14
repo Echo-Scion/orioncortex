@@ -5,7 +5,7 @@
 """
 Native OS Memory Virtualization & Graph Community Clustering for .agents
 Pure Python 3 standard library implementation.
-Absorbs Letta/MemGPT virtual memory (Core, Recall, Archival) and LightRAG/GraphRAG community clustering.
+Absorbs VirtualMemoryHierarchy (Core, Recall, Archival) and DualLevelGraphRAG community clustering.
 """
 import os
 import sys
@@ -41,7 +41,7 @@ CORE_MEM_PATH = os.path.join(ORION_DIR, 'working', 'core_memory.json')
 
 class CoreMemoryManager:
     """
-    Virtual Core Memory (Letta/MemGPT pattern).
+    Virtual Core Memory (VirtualMemoryHierarchy pattern).
     Holds persistent human profile and agent persona invariants in active context.
     """
     def __init__(self, path: str = CORE_MEM_PATH):
@@ -98,7 +98,7 @@ class CoreMemoryManager:
     def format_prompt_block(self) -> str:
         """Outputs high-density Core Memory for prompt injection."""
         return (
-            f"🧠 [CORE MEMORY (Letta Virtual Memory)]\n"
+            f"🧠 [CORE MEMORY (VirtualMemoryHierarchy)]\n"
             f"- Human Profile : {self.data.get('human', '')}\n"
             f"- Persona Invariants: {self.data.get('persona', '')}\n"
         )
@@ -106,7 +106,7 @@ class CoreMemoryManager:
 
 class ArchivalMemoryManager:
     """
-    Virtual Archival Memory (Letta + SQLite FTS5 pattern).
+    Virtual Archival Memory (VirtualMemoryHierarchy + SQLite FTS5 pattern).
     Stores persistent domain knowledge, specifications, and architectural invariants.
     """
     def __init__(self, db_path: str = DB_PATH):
@@ -179,7 +179,7 @@ class ArchivalMemoryManager:
 
 class RecallMemoryManager:
     """
-    Virtual Recall Memory (Letta + SQLite Telemetry pattern).
+    Virtual Recall Memory (VirtualMemoryHierarchy + SQLite Telemetry pattern).
     Tracks historical operational events, exit codes, and recent conversational pulses.
     """
     def __init__(self, db_path: str = DB_PATH):
@@ -230,7 +230,7 @@ class RecallMemoryManager:
 
 class GraphCommunityClusterer:
     """
-    Hierarchical Community Clustering (LightRAG / Leiden GraphRAG pattern).
+    Hierarchical Community Clustering (DualLevelGraphRAG Louvain pattern).
     Discovers topological semantic communities from Orion SQLite knowledge graph.
     """
     def __init__(self, db_path: str = DB_PATH):
@@ -551,11 +551,11 @@ class SecondBrainManager:
             f"> Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
             "## Done\n"
             "- [x] PageRank Repo-Map absorbed into `scanner.py`.\n"
-            "- [x] Polyglot AST security & Rebuff canary defense absorbed into `security.py`.\n"
+            "- [x] Polyglot AST security & cryptographic canary defense absorbed into `security.py`.\n"
             "- [x] Mechanical mutation testing absorbed into `adversarial.py`.\n"
-            "- [x] Letta OS virtual memory & LightRAG Leiden clustering in `memory.py`.\n"
+            "- [x] VirtualMemoryHierarchy & DualLevelGraphRAG Louvain clustering in `memory.py`.\n"
             "- [x] Layer 2 AST Token Compression in `shrink.py` & Layer 3 Distillation in `distill.py`.\n"
-            "- [x] Reflexion 4-tuple failure pattern & DSPy rule compiler in `reflexion.py`.\n"
+            "- [x] VerbalReflectiveLearner failure pattern & DeclarativePromptPipeline compiler in `reflexion.py`.\n"
             "- [x] Lowest Viable Tier (LVT) Principle codified in `self-evolve/SKILL.md`.\n"
             "- [x] Native Second Brain & Obsidian Vault Exporter in `memory.py`.\n\n"
             "## In Progress\n"
@@ -582,7 +582,7 @@ class SecondBrainManager:
             ".agents/scripts/core/security.py": "Polyglot AST vulnerability & canary auditor",
             ".agents/scripts/commands/verify_agents.py": "Mechanical verification & integrity gate",
             ".agents/scripts/commands/adversarial.py": "Mechanical mutation testing & TDD gate",
-            ".agents/scripts/core/reflexion.py": "Reflexion failure patterns & DSPy compiler",
+            ".agents/scripts/core/reflexion.py": "VerbalReflectiveLearner failure patterns & DeclarativePromptPipeline compiler",
             ".agents/rules/core-guardrails.md": "Immutable engineering invariants",
             ".agents/hooks/pre-agent-wake.py": "Heartbeat FSM recovery hook"
         }
@@ -596,7 +596,7 @@ class SecondBrainManager:
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Orion OS Virtual Memory Engine (Letta + LightRAG pattern)")
+    parser = argparse.ArgumentParser(description="Orion OS Virtual Memory Engine (VirtualMemoryHierarchy + DualLevelGraphRAG pattern)")
     subparsers = parser.add_subparsers(dest="command")
 
     # Core Memory
@@ -703,7 +703,7 @@ def main():
         if args.json:
             print(json.dumps(comms, indent=2))
         else:
-            print(f"\n🌐 Knowledge Graph Communities (LightRAG Leiden Clustering)")
+            print(f"\n🌐 Knowledge Graph Communities (DualLevelGraphRAG Louvain Clustering)")
             print("=" * 60)
             print(f"Discovered {len(comms)} topological communities:\n")
             for c in comms:

@@ -9,7 +9,7 @@ activation: when navigating the ecosystem or seeking an overview of agent capabi
 ## 1. 📚 RULES (The Core Guardrails)
 - **Index**: `.agents/rules/RULES_INDEX.md` (Master index of all standards)
 - **Primary Guardrail**: `.agents/rules/core-guardrails.md`
-- **Formal State Machine**: `.agents/rules/standards/fsm-protocol.md`
+- **Formal State Machine**: `.agents/rules/fsm-protocol.md`
 - **Contradiction**: `.agents/rules/contradiction-protocol.md`
 - **Memory Hygiene**: `.agents/rules/memory-hygiene.md`
 
@@ -51,7 +51,7 @@ activation: when navigating the ecosystem or seeking an overview of agent capabi
 - **lessword-compress**: `.agents/skills/lessword/references/lessword-compress.md` (Token reduction for memory files)
 - **project-init**: `.agents/skills/app-lifecycle/references/project-init.md` (Root/sub-project unified initialization)
 - **project-migrate**: `.agents/skills/app-lifecycle/references/project-migrate.md` (Brownfield/Legacy onboarding)
-- **prose-authenticity**: `.agents/rules/standards/prose_authenticity.md` (54-pattern tell taxonomy, binary contrast reversals & jargon purge)
+- **prose-authenticity**: `.agents/rules/prose-authenticity.md` (54-pattern tell taxonomy, binary contrast reversals & jargon purge)
 - **temporal-pulse**: `.agents/skills/self-evolve/references/temporal-pulse.md` (Activity-based session, milestone, and epoch synthesis)
 
 ## 3. 🚀 PROCEDURAL PLAYBOOKS (Modern Skills Architecture)

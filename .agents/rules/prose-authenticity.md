@@ -35,6 +35,7 @@ Current language models default to predictable structural habits. Every entry be
 16. **Fake Casual Props**: Chatbot stage directions and forced informalities (*"*checks notes*", "*shrugs*", "chef's kiss", "(yes, really)", "(and that's okay)"*).
 17. **Generic Future Narratives**: Formulaic optimism closers (*"As we look ahead, the future of X is brighter than ever", "Only time will tell, but one thing is certain" *).
 18. **Chatbot Leftovers**: *as of my last update, I hope this helps, in summary, to wrap up, let's dive in*.
+19. **Em-Dash Overuse**: Forbid overused em-dash characters (`—`) as universal clause connectors. Use standard punctuation (comma, period, colon, parentheses).
 
 ---
 
@@ -77,6 +78,11 @@ Inanimate concepts, code, architectures, and algorithms cannot perform human act
 | *Circle back* | Revisit, return to |
 | *Move the needle* | Improve results, make measurable progress |
 | *Table the discussion* | Postpone, defer |
+
+### Metric & Domain Honesty
+- **Evidence Over Metric Claims**: Quantitative assertions (e.g., "99.9% uptime", "10k+ users", "300% faster") must reflect verified database records or telemetry logs; otherwise omit entirely. Never invent metrics.
+- **Zero Fictitious Badges**: Forbid displaying uncertified compliance badges ("SOC 2 Type II", "ISO 27001", "Enterprise Ready") without verified proof in workspace.
+- **Concrete Domain Names**: Ban placeholder entity names (*Acme Corp, John Smith, Jane Doe, Nexus, Pulse, Unleash*). Use realistic, domain-specific naming.
 
 ---
 

@@ -34,16 +34,10 @@ last_updated: 2026-10-12
 > **No Raw CLI Patching**: Modifying files via `run_command` string substitutions (`sed`, `awk`, `python -c`) is strictly prohibited. Delegate file edits to IDE tools (`replace_file_content`, `multi_replace_file_content`).
 > **Portability Preservation**: Never write absolute paths or `file://` schemes into file contents. Use relative paths or `[[wikilinks]]`. Full standards: `development-operations.md § 8-9`.
 
-## 1.11 Engineering & Content Integrity (Truth in Implementation)
+## 1.11 Engineering Truth & Authenticity Mandate
 
-> **No Tautological Comments**: NEVER write code comments that merely restate syntax (`let count = 0; // set count to 0`). Comments must explain invariants, edge cases, or non-obvious algorithms.
-> **No Decorative Banners or Emoji in Code**: NEVER insert decorative ASCII boxes (`// ==================`, `/* -------------- */`) or decorative emoji into source code. Keep code clean and minimal.
-> **Zero Fabricated Claims or Metrics**: NEVER invent fictitious statistics ("10,000+ users", "99.999% uptime"), unearned trust badges, or fake compliance seals ("SOC 2") without verified telemetry data.
-> **No Generic Marketing Hype Buzzwords**: Ban generic AI hype words ("supercharge", "unleash", "elevate", "seamless", "cutting-edge", "game-changing") in copy and technical documentation. Write clear, factual English.
-> **Functional Elements Only**: Interactive controls (buttons, links, inputs) must execute verified handlers or be omitted. No `#` dead ends or non-functional decorative controls.
-> **No Re-Drawn Fake Chrome**: NEVER hand-craft simulated browser chrome (URL pill + traffic-light dots), fake phone frames, or fake terminal titlebars wrapping `<pre>` code blocks. Let the user's OS and actual browser render real chrome.
-> **Display Typographic Purity**: Headings (`<h1>` through `<h3>`) and display titles must remain upright roman (`font-style: normal`). NEVER use italicized emphasis words inside display headings (`Built to <em>think</em>`). Use weight or color tokens for emphasis.
-> **Locked Tokens Principle**: Every color and typography declaration in UI code must reference a named token from `DESIGN.md`. Zero inline arbitrary hex or mid-render improvisation.
+> - **Code Authenticity**: FORBIDDEN: empty catch blocks (`catch (e) {}`), simulated latency (`setTimeout`/`sleep`), or synthetic mock APIs in production code. (Enforced via `GEMINI.md §1`).
+> - **Domain Standards**: For human-facing copywriting, load `rules/prose-authenticity.md`. For UI visual craft and layout authenticity, load `skills/ui-finish/references/craft_floor.md`.
 
 ## 1.12 Anti-Affirmation & Adversarial Inquiry (Triad Threat Probe)
 
@@ -68,6 +62,13 @@ last_updated: 2026-10-12
 > - Deleting untracked user files or uncommitted working tree state outside ephemeral scratch directories.
 > - Transmitting production release payloads, publishing packages, or executing external network mutations.
 > - Ambiguous architectural forks where the plan is broken and every forward path is a blind guess.
+
+## 1.14 Surgical Editing & Simplicity Gate (Anti-Bloat & Zero Drive-by)
+
+> **Surgical Diff Mandate**: Touch only what you must. NEVER alter adjacent code, reformat surrounding whitespace, or "improve" comments unrelated to the prompt. Match existing project style, conventions, and idioms even if you prefer an alternative.
+> **Clean Your Own Mess Only**: When your edits render imports, variables, or helpers unused, remove them immediately. You are FORBIDDEN from deleting pre-existing dead code or unreferenced functions unless explicitly instructed by the user. Every line changed in a diff must trace directly to user intent.
+> **Simplicity First (YAGNI & Anti-Speculation)**: Implement the minimum code that solves the problem. FORBIDDEN: speculative abstractions, single-use helper factories, unrequested configurability/flexibility, or defensive code handling impossible scenarios. If a solution can be implemented cleanly in 50 lines, submitting 200 lines is an engineering failure.
+> **Ambiguity Halt**: If multiple valid implementations exist or an obvious simpler alternative is possible, explicitly present tradeoffs and ask the user via IDE tools before writing implementation. Never pick a speculative path silently.
 
 ## 2. Reasoning Standards (Deterministic Flow)
 
@@ -115,39 +116,10 @@ If conflict remains unresolved:
 
 You MUST execute `view_file` on `.agents/skills/self-evolve/SKILL.md` for deterministic self-evolution when completing major milestones or recovering from errors.
 
-## 11. The Engineering Truth & Authenticity Mandate (Visual, Copy & Code Honesty)
+## 11. Domain Truth & Authenticity Standards (Canonical References)
 
-To eliminate AI synthetic superficiality and ensure production-grade trustworthiness:
+All deep domain mandates for copywriting, anti-slop prose, and UI visual craft are maintained in their canonical domain files:
+- **Writing & Copywriting**: `.agents/rules/prose-authenticity.md` (54-pattern tell taxonomy, banned jargon, metric honesty).
+- **UI & Layout Authenticity**: `.agents/skills/ui-finish/references/craft_floor.md` (fake chrome refusal, social proof verification, resilient state triad).
 
-### 11.1 Visual & Layout Authenticity
-- **No Drawn Fake Chrome**: NEVER render fake browser window headers, traffic-light dots (red/yellow/green circles), or artificial smartphone bezels inside web viewports. Allow the native OS/browser to render natural viewports.
-- **No Fabricated Social Proof**: NEVER render fictional 5-star ratings, synthetic testimonial avatars, or generic placeholder partner logos without explicit data records.
-- **Functional Completeness**: Every button, link, and interactive widget must either perform an authentic operational action or must not exist. Forbid non-functional decorative buttons (`href="#"`, `onClick={() => {}}`).
-- **Resilient State Triad**: Every interactive surface must explicitly implement the complete state triad: **Loading**, **Empty**, and **Error** states with actionable recovery.
 
-### 11.2 Copywriting, Structural Prose & Metric Honesty
-- **No Em-Dash Abuse**: Forbid overused em-dash characters (`—`) as universal clause connectors. Use standard punctuation (comma, period, colon, parentheses).
-- **No Empty AI Buzzwords & 3-Tier Lexical Purge**: Banned vocabulary across all documentation and copy:
-  - *Tier 1 (Universal Flags)*: `delve`, `tapestry`, `testament`, `pivotal`, `beacon`, `undeniably`, `unwavering`, `paramount`, `cornerstone`.
-  - *Tier 2 (Corporate Jargon)*: `foster`, `harness`, `leverage`, `seamless`, `holistic`, `paradigm`, `synergy`, `streamline`, `robust`, `game-changer`, `next-level`, `deep dive`, `unpack`, `circle back`, `double down`.
-  - *Tier 3 (Hype Words)*: `revolutionary`, `cutting-edge`, `empower`, `elevate`, `unleash`, `transformative`, `pivotal moment`, `new era of`.
-- **No Structural Staging & Formulaic Tells**:
-  - *No Not-X-But-Y Contrasts*: Ban strawman negative setups ("It's not just a tool, it's a partner"). State positive claims directly.
-  - *No Dramatic One-Line Closers*: Ban standalone dramatic fragments restating prior paragraphs ("That is the real win.", "Let that sink in.", "Read that again.").
-  - *No Throat-Clearing Openers*: Ban staging run-ups ("Let's dive in", "Here's what you need to know", "Honestly?", "The uncomfortable truth is").
-  - *No Faux-Deep Aphorisms*: Ban dressing ordinary technical facts as philosophical truths ("At its core", "the architecture of trust", "X is the Y of Z").
-  - *No Forced Triads*: State exact item counts; never pad or group into artificial threes.
-- **No False Agency**: Forbid inanimate concepts performing human actions ("the architecture decides", "the error emerges", "the issue resolves itself"). Explicitly name the responsible engineer, actor, or component.
-- **Adverb & Softener Purge**: Prohibit filler adverbs (`really`, `just`, `basically`, `actually`, `essentially`, `-ly` intensifiers) in technical specifications, documentation, and agent reasoning.
-- **P0 Credibility Killers**: Instant failure on knowledge cutoff disclaimers ("As of my last update", "As of my knowledge cutoff") and conversational chatbot leftovers ("I hope this helps!", "Great question!").
-- **Protected Content Boundaries**: When auditing or cleaning prose, code blocks, tables, URLs, file paths, YAML frontmatter, identifiers, and direct quotes are **100% IMMUTABLE**. Never alter code or structured metadata during prose edits.
-- **Bounded 2-Pass Iteration**: Maximum 2 editing passes for prose cleanup. Stop editing immediately when zero blocker patterns remain; open-ended loops cause semantic drift.
-- **Evidence Over Metric Claims & Source Fidelity**: Any quantitative claim (e.g. "99.9% uptime", "10k+ users", "300% faster") must be backed by real database metrics or telemetry logs; otherwise omit it entirely. NEVER invent facts, benchmarks, or citations to make copy sound authoritative.
-- **No Fictitious Compliance Badges**: Forbid displaying uncertified badges ("SOC 2 Type II", "ISO 27001", "Enterprise Ready") unless verifiable proof exists in the workspace.
-- **Concrete Domain Names**: Banned placeholder names: *Acme Corp, John Smith, Jane Doe, Nexus, Pulse, Unleash*. Lead with authentic domain naming.
-- **Canonical Standard Reference**: Load and apply `.agents/rules/standards/prose_authenticity.md` for the complete 54-pattern taxonomy, binary reversal formulas table, corporate jargon dictionary, and voice-preserving rewrite protocol.
-
-### 11.3 Code Authenticity & Runtime Integrity
-- **No Empty Catch Blocks**: FORBIDDEN: `catch (e) {}` blocks that silently swallow exceptions without logging or recovery.
-- **No Simulated Latency**: FORBIDDEN: Fake `setTimeout()` or `sleep()` to simulate backend latency or AI generation.
-- **No Synthetic Mock APIs in Production**: FORBIDDEN: Hardcoded mock JSON payloads embedded directly in production API handlers or services.

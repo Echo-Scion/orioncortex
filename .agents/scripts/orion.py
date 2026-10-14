@@ -67,7 +67,11 @@ CMD_MAP = {
     "shrink": ["commands", "shrink.py"],
     "distill": ["commands", "distill.py"],
     "eval": ["..", "evals", "audit_aesthetics.py"],
-    "contrast": ["..", "evals", "audit_aesthetics.py"]
+    "contrast": ["..", "evals", "audit_aesthetics.py"],
+    "pack": ["utils", "packer.py"],
+    "packer": ["utils", "packer.py"],
+    "mcp": ["core", "mcp_client.py"],
+    "assert": ["..", "evals", "assertion_engine.py"]
 }
 
 def print_help():

@@ -28,9 +28,8 @@
 .agents/logs/
 .agents/archive/
 .agents/scratch/
+.agents/teamwork/
 .agents/skills/internal/
-.agents/rules/local/*
-!.agents/rules/local/README.md
 .agents/canons/local/*
 !.agents/canons/local/README.md
 !.agents/canons/local/.gitkeep

@@ -17,6 +17,10 @@ These rules are inlined here to eliminate the boot-time cost of loading `core-gu
 - **Cross-Domain Synthesis**: If a prompt triggers multiple conflicting skills, explicitly synthesize a bridging pattern in your thought process before executing.
 - **Rule Precedence**: When rules conflict: `security-guardrails.md` > `core-guardrails.md` > `tier-execution-protocol.md` > Domain rules > Skills/Workflows.
 - **IDE-Native Interaction**: When a rule says "ask the user" or "interview the user", use your IDE's native interactive tools (e.g., `/grill-me`, Composer Ask) instead of plain text questions. When instructed to run long tasks, recommend `/goal`. When instructed to schedule checks, use `/schedule`.
+- **Surgical Diff Mandate**: Touch only what you must. NEVER alter adjacent code, comments, or formatting unrelated to the prompt. Match existing project style. Remove only imports/variables orphaned by your own changes. Never delete pre-existing dead code unless explicitly requested. Every changed line must trace directly to user intent.
+- **Simplicity First (YAGNI)**: Implement minimum code that solves the problem. Zero speculative abstractions, single-use helper classes, unrequested flexibility, or error handling for impossible scenarios. If 50 lines suffice, 200 lines is a failure.
+- **Ambiguity Halt**: If multiple valid interpretations exist or a simpler alternative is obvious, present tradeoffs and ask via IDE tools before writing implementation. Do not pick silently.
+- **Code Authenticity**: FORBIDDEN: empty catch blocks (`catch (e) {}`), simulated latency (`setTimeout`/`sleep`), or synthetic mock APIs in production code.
 
 ## 1.5. SESSION BOOTSTRAP (Tier-Aware)
 
@@ -99,6 +103,7 @@ DO NOT rely on your internal LLM memory for how to execute these tasks.
 | **Codebase Audit, Audit Ledger, Multi-Session Audit** | `.agents/skills/integrity-sentinel/references/audit-ledger.md` |
 | **Business Rule Extraction, Conversational Context** | `.agents/skills/session-offload/references/auto-context.md` |
 | **Knowledge Extraction, Graph Triplet Ingestion** | `.agents/skills/brain-graph/references/knowledge-extraction.md` |
+| **Documentation, Copywriting, Readme, PR Description, Anti-Slop, Prose** | `.agents/rules/prose-authenticity.md` |
 
 *Note: Once you load the file, you MUST physically execute any scripts or commands it asks you to run via your CLI/terminal tool. If a referenced canon file is missing (ghost routing), skip it and rely on generic protocols.*
 

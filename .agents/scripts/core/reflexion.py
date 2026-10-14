@@ -3,9 +3,9 @@
 # dependencies = []
 # ///
 """
-Native Reflexion & Self-Evolution Engine for .agents
+Native VerbalReflectiveLearner & Self-Evolution Engine for .agents
 Pure Python 3 standard library implementation.
-Absorbs NoahShinn/Reflexion (linguistic error reflection) and StanfordNLP/DSPy (rule enforcement compilation).
+Absorbs VerbalReflectiveLearner (linguistic error reflection) and DeclarativePromptPipeline (rule enforcement compilation).
 """
 import os
 import sys
@@ -36,7 +36,7 @@ MATRIX_DIR = os.path.join(WORKSPACE_DIR, '.orion', 'matrix')
 
 class ReflexionEngine:
     """
-    Linguistic Self-Reflection & Persistent Learning (Reflexion pattern).
+    Linguistic Self-Reflection & Persistent Learning (VerbalReflectiveLearner pattern).
     Captures post-error reflections and converts them into durable invariants in LEARNINGS.md.
     """
     def __init__(self, learnings_path: str = LEARNINGS_FILE):
@@ -137,7 +137,7 @@ class ReflexionEngine:
 
 class PromptRuleCompiler:
     """
-    Declarative Rule & Enforcement Compiler (DSPy pattern).
+    Declarative Rule & Enforcement Compiler (DeclarativePromptPipeline pattern).
     Audits active rule matrices and verifies executable enforcement gates (Anti-Graveyard Gate).
     """
     def __init__(self, matrix_dir: str = MATRIX_DIR, scripts_dir: str = os.path.join(BASE_DIR, 'scripts')):
@@ -208,7 +208,7 @@ class PromptRuleCompiler:
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Reflexion & Self-Evolution Engine (Reflexion + DSPy pattern)")
+    parser = argparse.ArgumentParser(description="VerbalReflectiveLearner & Self-Evolution Engine (VerbalReflectiveLearner + DeclarativePromptPipeline pattern)")
     subparsers = parser.add_subparsers(dest="command")
 
     # Record reflection
@@ -227,7 +227,7 @@ def main():
     subparsers.add_parser("list", help="List all recorded self-evolution learnings")
 
     # Audit rules
-    audit_parser = subparsers.add_parser("audit", help="Audit rule enforcement coverage (DSPy pattern)")
+    audit_parser = subparsers.add_parser("audit", help="Audit rule enforcement coverage (DeclarativePromptPipeline pattern)")
     audit_parser.add_argument("--json", action="store_true", help="JSON output")
 
     args = parser.parse_args()
@@ -247,7 +247,7 @@ def main():
             resting_tier=args.tier
         )
         if ok:
-            print(f"[REFLEXION] Learning recorded in {LEARNINGS_FILE}: '{args.title}' [Lowest Viable Tier: {args.tier.upper()}]")
+            print(f"[REFLECTIVE_LEARNER] Learning recorded in {LEARNINGS_FILE}: '{args.title}' [Lowest Viable Tier: {args.tier.upper()}]")
         else:
             print("[ERROR] Failed to record learning.")
             sys.exit(1)
@@ -267,7 +267,7 @@ def main():
         if args.json:
             print(json.dumps(report, indent=2))
         else:
-            print(f"\n⚖️ Declarative Rule Enforcement Audit (DSPy Anti-Graveyard Gate)")
+            print(f"\n⚖️ Declarative Rule Enforcement Audit (DeclarativePromptPipeline Anti-Graveyard Gate)")
             print("=" * 60)
             print(f"Total Rules Indexed  : {report['total_rules']}")
             print(f"Mechanically Enforced: {report['enforced_count']} ({report['mechanical_coverage_pct']}%)")

@@ -61,6 +61,12 @@ These patterns represent lazy model defaults. Refuse them unless explicitly dema
 5. **Emoji as Icons**: Forbid unicode emoji in place of a drawn, single-weight vector icon set (Lucide, Radix, Phosphor).
 6. **Fake Mobile Viewports**: Reject `h-screen` which breaks on mobile browser address bar collapse. Use `min-h-[100dvh]`.
 
+### Authenticity Refusals:
+1. **Drawn Fake Chrome**: NEVER render fake browser window headers, traffic-light dots (red/yellow/green circles), or artificial smartphone bezels inside web viewports. Let the native OS/browser render natural viewports.
+2. **Fabricated Social Proof**: NEVER render fictional 5-star ratings, synthetic testimonial avatars, or generic placeholder partner logos without explicit data records.
+3. **Non-Functional Controls**: Every button, link, and interactive widget must either perform an authentic operational action or be omitted. Forbid `#` dead-ends and dummy handlers.
+4. **Resilient State Triad**: Every interactive surface must explicitly implement the complete state triad: **Loading**, **Empty**, and **Error** states with actionable recovery.
+
 ---
 
 ## 3. Four Visitor Interaction Modes

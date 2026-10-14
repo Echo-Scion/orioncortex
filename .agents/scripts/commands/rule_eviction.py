@@ -68,7 +68,7 @@ def evict_assets(agents_dir, orion_db_path, archive_dir=".orion/archive", base_d
     now = time.time()
     evict_count = 0
 
-    target_dirs = ["rules/local", "skills/local"]
+    target_dirs = ["skills/local"]
 
     print(f"--- SCANNING FOR STALE LOCAL ASSETS ---")
     

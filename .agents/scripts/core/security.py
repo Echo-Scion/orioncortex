@@ -667,7 +667,7 @@ class SecurityAuditor:
             target_dir = self.root_dir
 
         if exclude_dirs is None:
-            exclude_dirs = {'.git', 'node_modules', '__pycache__', '.system_generated', 'scratch', 'build', 'dist'}
+            exclude_dirs = {'.git', 'node_modules', '__pycache__', '.system_generated', 'scratch', 'build', 'dist', 'teamwork', 'tests', 'archive'}
 
         all_active: List[Dict[str, Any]] = []
         all_suppressed: List[Dict[str, Any]] = []

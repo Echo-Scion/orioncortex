@@ -37,6 +37,9 @@ Q2. How should the file be split?
 
 *Actionable Command*: Run `python .agents/scripts/orion.py scan tokens` to identify ghost tokens.
 
+## 2.1 Token-Conscious Read Protocol (Zero-Body Protocol)
+For initial discovery on source files >100 lines, you MUST use `rtk read <path> --level aggressive` or targeted `grep_search` before full reads. Avoid `view_file` on large files during initial triage.
+
 ## 3. Application Performance Decision Tree
 
 Before adding complexity for "performance", consult this tree:
