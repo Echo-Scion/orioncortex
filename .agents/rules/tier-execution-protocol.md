@@ -2,7 +2,7 @@
 description: Protocol for selecting the correct model tier and the enforced workflows per tier (Bento Box, Auto-router).
 activation: model_decision
 
-version: 0.1.0
+version: 0.1.1
 last_updated: 2026-09-26
 ---
 
@@ -90,11 +90,11 @@ To preserve the main thread's token context during long sessions, use subagents 
 
 ### Subagent Reviewer Quota Guard (Second-Worker-First Delegation Law)
 To prevent cloud quota exhaustion from spawning multiple subagents on primary `PREMIUM` models:
-1. **Second-Worker-First Law (0% Primary IDE Quota)**:
-   - Read-only 5-Lens Goldfish spec reviews, codebase scouts, and patch pre-drafts MUST be dispatched first via `python .agents/scripts/orion.py worker review --spec <path>` (aliased as `orion.py delegate`).
-   - This routes reviews through the Dual-Engine Second Worker (OpenCode Go API in parallel `max_workers=3` or Local Ollama sequentially `max_workers=1`), consuming **0%** of the user's IDE cloud quota.
-2. **Native Subagent Bounded Fallback**:
-   - Native `invoke_subagent` calls are permitted ONLY if both API Worker and Local Ollama are offline AND the host IDE platform explicitly supports native subagents.
+1. **Capability-Gated Second-Worker Routing**:
+   - Check `.orion/working/capabilities.json` (or `orion.py worker status`) first. Dispatch `python .agents/scripts/orion.py worker review --spec <path>` ONLY when an API Worker (`ORION_API_KEY`) or Local Ollama Generative Model is verified `ACTIVE`.
+   - If both workers are `OFFLINE`, `worker.py` exits with code `2` (`OFFLINE_NO_WORKER`); do NOT invoke `worker.py` blindly or treat an unexecuted report (`status: not_run`) as a completed review.
+2. **Native Subagent & In-Thread Fallback**:
+   - When external workers are offline, immediately use native `invoke_subagent` (capped at $\le 2$ disjoint read-only scouts with Jaccard overlap $J \le 0.20$) or perform the review directly in the main thread.
    - When using native fallback, the Main Agent **MUST** down-tier to `Model: 'flash'`, capped at $\le 2$ concurrent subagents.
 3. **Complexity-Governed Reviewer Count**:
    - **$S_{\text{effective}} \le 2.5$ (`BUDGET`)**: **0 subagents.** The Main Agent conducts the plan verification in-thread.

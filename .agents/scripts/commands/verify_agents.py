@@ -361,7 +361,7 @@ def iter_files(base_dir: str, extensions: Tuple[str, ...], include_root_configs:
         dirs[:] = [d for d in dirs if should_traverse_dir(d, allow_agents=True)]
         for file_name in files:
             if file_name.endswith(extensions):
-                if file_name in ("OBSERVATIONS.md", "OBSERVATIONS.archive.md", "failures.log"):
+                if file_name in ("OBSERVATIONS.md", "OBSERVATIONS.archive.md", "failures.log") or file_name.endswith((".sidecar.json", ".ledger.jsonl", ".orion_mut_bak")):
                     continue
                 yield os.path.join(root, file_name)
 
@@ -562,7 +562,7 @@ def check_links(res: AuditResult, verbose: bool = True):
             all_rules.add(root_md)
             all_rules.add(root_md[:-3])
 
-    for d in [RULES_DIR, CANONS_DIR, TEMPLATES_DIR]:
+    for d in [RULES_DIR, CANONS_DIR, TEMPLATES_DIR, SKILLS_DIR]:
         if os.path.exists(d):
             root_prefix = os.path.basename(d)
             for r, _, files in os.walk(d):
@@ -861,7 +861,7 @@ def check_protocol_compliance(res: AuditResult, verbose: bool = True):
     if os.path.exists(SKILLS_DIR):
         for skill_name in os.listdir(SKILLS_DIR):
             skill_path = os.path.join(SKILLS_DIR, skill_name)
-            if not os.path.isdir(skill_path): continue
+            if not os.path.isdir(skill_path) or skill_name.startswith(".") or skill_name == "internal": continue
             res.stats["skills"] += 1
             skill_md = os.path.join(skill_path, "SKILL.md")
             if not os.path.exists(skill_md):
@@ -976,6 +976,14 @@ def check_ast_blueprint_drift(res: AuditResult, verbose: bool = True):
         if len(content.strip()) < 10:
             res.add_error("DRIFT", "BLUEPRINT.md is virtually empty", blueprint_path)
         else:
+            referenced_files = re.findall(r'`((?:src|lib|app|core|\.agents)/[A-Za-z0-9_./-]+\.[a-zA-Z0-9]+)`', content)
+            missing = []
+            for rf in referenced_files:
+                full_rf = os.path.join(PROJECT_ROOT, rf)
+                if not os.path.exists(full_rf):
+                    missing.append(rf)
+            if missing:
+                res.add_warning("DRIFT", f"BLUEPRINT.md references {len(missing)} missing file(s): {', '.join(missing[:3])}", blueprint_path)
             rel_display = os.path.relpath(blueprint_path, os.path.dirname(BASE_DIR)).replace("\\", "/")
             if verbose: print(f" [PASS] Blueprint verified ({rel_display}).")
     except Exception as e:
@@ -1171,8 +1179,10 @@ def check_schema_producer_consumer(res: AuditResult, verbose: bool = True):
     scripts_dir = os.path.join(BASE_DIR, "scripts")
     script_sources = []
     for root, _, files in os.walk(scripts_dir):
-        if "__pycache__" in root: continue
+        norm_r = root.replace("\\", "/")
+        if "__pycache__" in norm_r or "/tests" in norm_r: continue
         for f in files:
+            if f == "verify_agents.py": continue
             if f.endswith(".py"):
                 p = os.path.join(root, f)
                 try:
@@ -1342,7 +1352,7 @@ def check_security_integrity(res: AuditResult, verbose: bool = True, fast_delta:
         except ImportError:
             from security import SecurityAuditor  # type: ignore[import-not-found]
         
-        auditor = SecurityAuditor(BASE_DIR)
+        auditor = SecurityAuditor(PROJECT_ROOT)
         
         if fast_delta:
             active: List[Dict[str, Any]] = []
@@ -1388,9 +1398,9 @@ def check_security_integrity(res: AuditResult, verbose: bool = True, fast_delta:
                         active.extend(act)
                         suppressed.extend(sup)
             except Exception:
-                active, suppressed = auditor.audit_directory()
+                active, suppressed = auditor.audit_directory(target_dir=PROJECT_ROOT)
         else:
-            active, suppressed = auditor.audit_directory()
+            active, suppressed = auditor.audit_directory(target_dir=PROJECT_ROOT)
         
         if active:
             for item in active:
@@ -1431,7 +1441,10 @@ def check_vibe(res: AuditResult, filepath: str, verbose: bool = True):
         response = nb.vibe_check(content)
         
         if response:
-            if any(tok in response.upper() for tok in ["PASS", "YES"]):
+            resp_clean = response.strip().upper()
+            has_negation = bool(re.search(r'\b(?:NOT\s+PASS|FAIL|FAILED|DRIFT|CONTRADICTION|NO\b)', resp_clean))
+            has_affirm = bool(re.search(r'\b(?:PASS|PASSED|YES)\b', resp_clean))
+            if has_affirm and not has_negation:
                 if verbose: print(" [PASS] Semantic Integrity Verified.")
             else:
                 if verbose: print(f" [WARNING] NanoBrain flagged potential semantic drift:\n  {response}")
@@ -1666,6 +1679,20 @@ def check_command_parity(res: AuditResult, verbose: bool = True):
 
     if not missing_routing and verbose:
         print(f" [PASS] Skill JIT Parity: All {len(skills)} domain skills are mapped in {os.path.basename(instruction_path)} JIT routing table.")
+
+    rules_dir = os.path.join(BASE_DIR, "rules")
+    if os.path.exists(rules_dir):
+        rules = [f for f in os.listdir(rules_dir) if f.endswith(".md") and not f.startswith(".")]
+        missing_rules = []
+        for r in sorted(rules):
+            if r not in instruction_content:
+                missing_rules.append(r)
+        if missing_rules:
+            for mr in missing_rules:
+                res.add_warning("PARITY", f"Rule '{mr}' is not mapped in {os.path.basename(instruction_path)} JIT routing table", severity="LOW")
+                if verbose: print(f" [WARN] JIT Parity: Rule '{mr}' not found in {os.path.basename(instruction_path)} JIT table")
+        elif verbose:
+            print(f" [PASS] Rule JIT Parity: All {len(rules)} foundation rules are mapped in {os.path.basename(instruction_path)} JIT routing table.")
 
     routes_json = os.path.join(os.path.dirname(BASE_DIR), ".orion", "matrix", "skill_routes.json")
     if os.path.exists(routes_json):
@@ -3118,6 +3145,10 @@ class AdversarialMutationEngine:
             (ast.IsNot, ast.Is(), "is not", "is"),
         ]
 
+        cmp_mutants = []
+        bin_mutants = []
+        unary_mutants = []
+
         for node in ast.walk(tree):
             if isinstance(node, ast.Compare):
                 if changed_lines is not None and node.lineno not in changed_lines:
@@ -3133,7 +3164,7 @@ class AdversarialMutationEngine:
                                 builtins.compile(modified_tree, filename=file_path, mode="exec")
                                 mutated_code = ast.unparse(modified_tree)
                                 orig_line = lines[node.lineno - 1].strip() if node.lineno <= len(lines) else ""
-                                mutants.append({
+                                cmp_mutants.append({
                                     "line_num": node.lineno,
                                     "rule_id": f"AST_CMP_{old_sym}_TO_{new_sym}",
                                     "original_snippet": orig_line,
@@ -3142,8 +3173,8 @@ class AdversarialMutationEngine:
                                     "mutated_content": mutated_code,
                                     "file_path": file_path
                                 })
-                                if len(mutants) >= max_mutants:
-                                    return mutants
+                                if len(cmp_mutants) >= max_mutants:
+                                    break
                             except Exception as _e:
                                 _log_telemetry(_e, "python_ast_unparse")
 
@@ -3168,7 +3199,7 @@ class AdversarialMutationEngine:
                             builtins.compile(modified_tree, filename=file_path, mode="exec")
                             mutated_code = ast.unparse(modified_tree)
                             orig_line = lines[node.lineno - 1].strip() if node.lineno <= len(lines) else ""
-                            mutants.append({
+                            bin_mutants.append({
                                 "line_num": node.lineno,
                                 "rule_id": f"AST_BINOP_{old_sym}_TO_{new_sym}",
                                 "original_snippet": orig_line,
@@ -3177,8 +3208,8 @@ class AdversarialMutationEngine:
                                 "mutated_content": mutated_code,
                                 "file_path": file_path
                             })
-                            if len(mutants) >= max_mutants:
-                                return mutants
+                            if len(bin_mutants) >= max_mutants:
+                                break
                         except Exception as _e:
                             _log_telemetry(_e, "python_ast_binop_unparse")
 
@@ -3194,7 +3225,7 @@ class AdversarialMutationEngine:
                     builtins.compile(modified_tree, filename=file_path, mode="exec")
                     mutated_code = ast.unparse(modified_tree)
                     orig_line = lines[node.lineno - 1].strip() if node.lineno <= len(lines) else ""
-                    mutants.append({
+                    unary_mutants.append({
                         "line_num": node.lineno,
                         "rule_id": "AST_UNARY_NOT_INVERT",
                         "original_snippet": orig_line,
@@ -3203,12 +3234,19 @@ class AdversarialMutationEngine:
                         "mutated_content": mutated_code,
                         "file_path": file_path
                     })
-                    if len(mutants) >= max_mutants:
-                        return mutants
+                    if len(unary_mutants) >= max_mutants:
+                        break
                 except Exception as _e:
                     _log_telemetry(_e, "python_ast_unary_unparse")
 
-        return mutants
+        # Balanced round-robin merge
+        all_mutants = []
+        buckets = [cmp_mutants, bin_mutants, unary_mutants]
+        while len(all_mutants) < max_mutants and any(buckets):
+            for b in buckets:
+                if b and len(all_mutants) < max_mutants:
+                    all_mutants.append(b.pop(0))
+        return all_mutants
 
     def apply_mutation(self, file_path: str, mutation: Dict[str, Any]) -> None:
         with open(file_path, 'w', encoding='utf-8') as f:
@@ -3442,6 +3480,11 @@ def main_adversarial(argv: Optional[List[str]] = None) -> int:
             print_adversarial_banner("[!] ADVERSARIAL PROTOCOL VIOLATION [!]")
             print("ERROR: No failing test was recorded.")
             print("You must first run: `adversarial run <test_cmd>` and prove it fails.")
+            return 1
+
+        if state.get("command") and " ".join(cmd) != state.get("command"):
+            print_adversarial_banner("[!] ADVERSARIAL PROTOCOL VIOLATION [!]")
+            print(f"ERROR: Verify command '{' '.join(cmd)}' does not match recorded failing command '{state.get('command')}'.")
             return 1
 
         result = subprocess.run(cmd, shell=False, creationflags=_WINDOWLESS_FLAGS)

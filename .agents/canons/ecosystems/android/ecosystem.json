@@ -3,9 +3,9 @@
   "language": "kotlin",
   "extensions": [".kt", ".kts", ".java", ".xml", ".gradle"],
   "ignore_dirs": [".git", "node_modules", "build", "dist", ".agents", ".gradle", ".idea"],
-  "cli_audit": "gradlew.bat dependencies",
-  "cli_test": "gradlew.bat test",
-  "cli_test_coverage": "gradlew.bat testDebugUnitTestCoverage",
-  "cli_lint": "gradlew.bat lint",
+  "cli_audit": "./gradlew dependencies",
+  "cli_test": "./gradlew test",
+  "cli_test_coverage": "./gradlew testDebugUnitTestCoverage",
+  "cli_lint": "./gradlew lint",
   "package_file": "build.gradle"
 }

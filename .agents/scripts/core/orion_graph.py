@@ -297,7 +297,7 @@ class OrionGraphStore:
         # Ingest legacy nodes
         legacy_ids = {}
         if has_nodes:
-            cur.execute("SELECT id, type, name, source_path FROM nodes")
+            cur.execute("SELECT id, type, name, source_path FROM nodes WHERE type != 'MarkdownSection'")
             for r in cur.fetchall():
                 n_id = r[0] if isinstance(r, (tuple, list)) else r["id"]
                 n_type = r[1] if isinstance(r, (tuple, list)) else r["type"]
@@ -316,9 +316,9 @@ class OrionGraphStore:
         cur.execute("PRAGMA table_info(edges)")
         edge_columns = {row[1] for row in cur.fetchall()}
         if "source_path" in edge_columns:
-            cur.execute("SELECT source_id, target_id, relation, confidence, source_path FROM edges")
+            cur.execute("SELECT source_id, target_id, relation, confidence, source_path FROM edges WHERE lower(relation) != 'has_section'")
         else:
-            cur.execute("SELECT source_id, target_id, relation, confidence FROM edges")
+            cur.execute("SELECT source_id, target_id, relation, confidence FROM edges WHERE lower(relation) != 'has_section'")
         edge_rows = cur.fetchall()
         for r in edge_rows:
             src = r[0] if isinstance(r, (tuple, list)) else r["source_id"]
@@ -357,7 +357,7 @@ class OrionGraphStore:
         Returns mapping of entity_name -> cluster_id (at the highest modularity level).
         """
         cur = self.conn.cursor()
-        cur.execute("SELECT name, type FROM entities")
+        cur.execute("SELECT name, type FROM entities WHERE type != 'MarkdownSection'")
         entity_rows = cur.fetchall()
         entities = [r["name"] for r in entity_rows]
         entity_types = {r["name"]: r["type"] for r in entity_rows}
@@ -365,7 +365,7 @@ class OrionGraphStore:
         if not entities:
             return {}
 
-        cur.execute("SELECT subject_id, predicate, object_id, weight FROM relations")
+        cur.execute("SELECT subject_id, predicate, object_id, weight FROM relations WHERE lower(predicate) != 'has_section'")
         relation_rows = cur.fetchall()
 
         # Build undirected graph: node_idx <-> name
@@ -709,7 +709,7 @@ class OrionGraphStore:
                            bm25(entities_fts) as rank
                     FROM entities_fts
                     JOIN entities e ON entities_fts.rowid = e.id
-                    WHERE entities_fts MATCH ?
+                    WHERE entities_fts MATCH ? AND e.type != 'MarkdownSection'
                     ORDER BY rank ASC
                     LIMIT ?
                 """, (clean_fts_query, top_k_entities))
@@ -733,7 +733,8 @@ class OrionGraphStore:
                     cur.execute(f"""
                         SELECT subject_id, predicate, object_id, weight, source_path
                         FROM relations
-                        WHERE subject_id IN ({placeholders}) OR object_id IN ({placeholders})
+                        WHERE (subject_id IN ({placeholders}) OR object_id IN ({placeholders}))
+                          AND lower(predicate) != 'has_section'
                         ORDER BY weight DESC
                         LIMIT 15
                     """, matched_names + matched_names)
@@ -808,7 +809,7 @@ class OrionGraphStore:
         """Orion BFS Shortest Path Tracer between two entities across the knowledge graph."""
         from collections import deque
         cur = self.conn.cursor()
-        cur.execute("SELECT subject_id, predicate, object_id, weight, COALESCE(provenance, 'EXTRACTED') as provenance FROM relations")
+        cur.execute("SELECT subject_id, predicate, object_id, weight, COALESCE(provenance, 'EXTRACTED') as provenance FROM relations WHERE lower(predicate) != 'has_section'")
         adj: Dict[str, List[Tuple[str, str, float, str, str]]] = defaultdict(list)
         nodes_lower: Dict[str, str] = {}
         for r in cur.fetchall():
@@ -860,7 +861,8 @@ class OrionGraphStore:
         cur.execute("""
             SELECT subject_id, predicate, object_id, weight, COALESCE(provenance, 'EXTRACTED') as provenance, source_path
             FROM relations
-            WHERE lower(subject_id) = lower(?) OR lower(object_id) = lower(?)
+            WHERE (lower(subject_id) = lower(?) OR lower(object_id) = lower(?))
+              AND lower(predicate) != 'has_section'
             ORDER BY weight DESC LIMIT 25
         """, (target_name, target_name))
         edges = [dict(r) for r in cur.fetchall()]

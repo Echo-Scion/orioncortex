@@ -36,6 +36,15 @@
         "Partial/Offline",
         "Error (Actionable Retry)"
       ],
+      "screen_state_machine_families_count": 6,
+      "screen_state_machine_families": [
+        "Loading Skeleton",
+        "First-Time Empty",
+        "Filtered-to-Empty",
+        "Truncation-Safe Populated",
+        "Instructional Error Retry",
+        "Long-Text Production Gremlins"
+      ],
       "component_interactive_states_count": 8
     },
     "saas_viability_scorecard": {

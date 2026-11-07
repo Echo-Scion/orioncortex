@@ -1,7 +1,7 @@
 ---
 name: worker-delegate
 description: >-
-  Context-isolating read-only scout and partitioned audit delegator. Protects main thread token budget by offloading high-volume file exploration, log triage, and disjoint domain reviews to isolated sub-agents or background CLI engines.
+  Use when delegating high-volume file exploration, log triage, or disjoint domain reviews to isolated sub-agents or background workers.
 ---
 
 # Worker Delegation Protocol (Context-Isolating Scout)

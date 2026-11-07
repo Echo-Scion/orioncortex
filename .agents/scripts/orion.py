@@ -192,12 +192,13 @@ CMD_MAP = {
 _ALIAS_NAMES = {
     "decision",
     "verify_agents", "orion", "push-upstream", "sync-ai", "scanner",
-    "init", "onboard", "doctor",
-    "impulse", "task_slicer", "vault", "codex", "constellation", "portfolio", "reflexion",
+    "init", "onboard", "doctor", "foundation-upgrade", "hydrate_vision", "dna-lint",
+    "impulse", "task_slicer", "task-slicer", "slicer", "vault", "codex", "constellation", "portfolio", "reflexion",
     "compress_memory", "amnesia", "rule_eviction", "preflight_check",
     "track_budget", "compile_rules", "context_naming_lint",
     "instruction_language_lint", "matrix-query", "matrix_query",
-    "rtk_proxy", "reflect", "trace", "response-validator",
+    "rtk_proxy", "reflect", "record", "observe", "observations", "resolve", "habits",
+    "trace", "response-validator", "find-polluter", "delegate",
     "bun_runtime", "compactor", "events", "consequence-verify", "false-green",
     "sovereign_harness", "compile_ast", "ast_rules", "repomap", "orion_graph",
     "packer", "digest", "contrast", "event_stream", "clean", "delegate_check", "bento_slicer",
@@ -233,16 +234,16 @@ COMPACT_GROUP = {
 
 # Grouped help sections — order matters for display
 _HELP_GROUPS = {
-    "Brain / Knowledge":   ["brain", "context", "ingest", "orion_ops", "raw_ingest", "consolidate",
-                            "contradict", "linkify", "memory", "graph", "gc", "constellation"],
+    "Brain / Knowledge":   ["brain", "hydrate", "context", "ingest", "orion_ops", "raw_ingest", "consolidate",
+                            "contradict", "linkify", "memory", "graph", "gc", "galaxy", "observatory", "pulsar"],
     "Scan / Audit":        ["scan", "verify", "security", "eval", "preflight",
                             "adversarial", "context-lint", "instruction-lint",
-                            "matrix", "compile", "consequence"],
+                            "matrix", "compile", "consequence", "polluter", "delegate-check"],
     "Compression Suite":   ["compact", "compress", "shrink", "distill"],
-    "Foundation / Deploy": ["setup", "foundation", "hydrate-vision", "dna", "evolve", "bun", "push", "project", "env"],
-    "Runtime / Misc":      ["fsm", "bento", "reflexion", "harness", "rtk", "telemetry",
-                            "sandbox", "events", "pack", "budget",
-                            "compile_ast", "diagnostics", "validate-response",
+    "Foundation / Deploy": ["setup", "foundation", "deploy", "upgrade", "hydrate-vision", "dna", "design", "evolve", "bun", "push", "project", "env"],
+    "Runtime / Misc":      ["fsm", "bento", "dispenser", "worker", "worktree", "decisions", "harness", "rtk", "telemetry",
+                            "sandbox", "pack", "budget",
+                            "diagnostics", "validate-response",
                             "assert", "state_graph"],
 }
 
@@ -402,9 +403,10 @@ def main():
         sys.exit(130)
     except Exception as _runpy_err:
         sys.argv = orig_argv
-        if os.environ.get("ORION_DEBUG"):
-            sys.stderr.write(f"[ORION_RUNPY_FALLBACK] In-process execution fell back: {_runpy_err}\n")
-        in_process_success = False
+        import traceback
+        traceback.print_exc()
+        exit_code = 1
+        in_process_success = True
 
     if not in_process_success:
         try:

@@ -155,12 +155,12 @@ class TestConsequenceVerifier(unittest.TestCase):
         self.assertEqual(len(findings), 0)
 
     def test_false_green_scanner_shape_4_shallow_substring(self):
-        code = """
-        it("generates dart model correctly", () => {
-            const result = generateFlutterCode(model);
-            assert.ok(result.code.includes("class UserDTO"));
-        });
-        """
+        code = (
+            'it("generates dart model correctly", () => {\n'
+            '    const result = generateFlutterCode(model);\n'
+            '    assert.' + 'ok(result.code.includes("class UserDTO"));\n'
+            '});\n'
+        )
         findings = FalseGreenScanner.audit_content(code, "flutterCodeGenerator.test.ts")
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0]["shape"], "Shape 4: Shallow Substring / Semantic Bypass Assertion")

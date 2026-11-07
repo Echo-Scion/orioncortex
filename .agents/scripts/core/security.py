@@ -2085,7 +2085,7 @@ class SecurityAuditor:
                 from core.paths import DEFAULT_IGNORE_DIRS
                 exclude_dirs = set(DEFAULT_IGNORE_DIRS)
             except ImportError:
-                exclude_dirs = {'.git', '.orion', 'node_modules', '__pycache__', '.system_generated', 'scratch', '.scratch', '.worktrees', '.venv', 'venv', 'build', 'dist', 'teamwork', 'archive'}
+                exclude_dirs = {'.git', '.orion', 'node_modules', '__pycache__', '.system_generated', 'scratch', '.scratch', '.worktrees', '.venv', 'venv', 'build', 'dist', 'teamwork', 'archive', 'tools', 'constellation'}
 
         all_active: List[Dict[str, Any]] = []
         all_suppressed: List[Dict[str, Any]] = []

@@ -297,12 +297,16 @@ class AssertionEvaluator:
         elif a_type == "assert-set":
             child_assertions = assertion.get("assertions", [])
             operator = assertion.get("operator", "and").lower()
-            results = [AssertionEvaluator.evaluate(output, child) for child in child_assertions]
-            if operator == "or":
-                passed = any(r["passed"] for r in results)
+            if not child_assertions:
+                passed = False
+                message = "assert-set requires non-empty assertions list"
             else:
-                passed = all(r["passed"] for r in results)
-            message = f"assert-set ({operator}): {sum(1 for r in results if r['passed'])}/{len(results)} passed"
+                results = [AssertionEvaluator.evaluate(output, child) for child in child_assertions]
+                if operator == "or":
+                    passed = any(r["passed"] for r in results)
+                else:
+                    passed = all(r["passed"] for r in results)
+                message = f"assert-set ({operator}): {sum(1 for r in results if r['passed'])}/{len(results)} passed"
 
         elif a_type in {"similar", "similarity"}:
             emb_out = _get_ollama_embedding(output)

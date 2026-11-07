@@ -1,7 +1,7 @@
 ---
 name: ai-engineer
 description: >-
-  Concrete engineering algorithms and patterns to mitigate probabilistic LLM limitations (GIGO, drift, hallucinations, latency) and audit AI/LLM threats (prompt injection, slopsquatting). Use when designing, building, or auditing AI integrations, LLM features, or ML pipelines.
+  Use when designing, building, evaluating, or auditing AI/LLM integrations, prompt pipelines, model drift, probabilistic traits, or AI agentic threats.
 ---
 
 # 🧠 AI Engineering Standards & Mitigating AI Limitations

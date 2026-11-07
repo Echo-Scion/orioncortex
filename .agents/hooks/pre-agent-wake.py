@@ -203,7 +203,6 @@ def _bootstrap_identity(identity_path: str, base_agents_dir: str, learnings_path
                 identity_content = old_content
                     
                 if top_lessons:
-                    import re
                     lessons_str = '\n'.join(f"{i+1}. {l}" for i, l in enumerate(top_lessons))
                     identity_content = re.sub(
                         r'(## Active Lessons \(Top 5\)).*?(?=## |$)', 
@@ -245,7 +244,6 @@ def _bootstrap_identity(identity_path: str, base_agents_dir: str, learnings_path
 def _check_heartbeat(learnings_path: str, base_agents_dir: str) -> Tuple[bool, int]:
     evolution_overdue = False
     unprocessed_learnings = 0
-    import re
     if os.path.exists(learnings_path):
         try:
             with open(learnings_path, 'r', encoding='utf-8') as f:
@@ -331,7 +329,7 @@ def _check_fsm(fsm_state_path: str) -> str:
                     f"\n[CIRCUIT BREAKER DETECTED]: 3 cyclical or identical actions occurred on {act_info}. "
                     "Root-cause: Repetitive execution cycle. Do not repeat the same action; use alternative approach."
                 )
-            paging_file = stream.detect_sequential_paging(consecutive_threshold=2)
+            paging_file = stream.detect_sequential_paging(consecutive_threshold=4)
             if paging_file:
                 recovery_instruction += (
                     f"\n[SEQUENTIAL PAGING DETECTED]: Consecutive file chunk reads detected on '{os.path.basename(paging_file)}'. "
@@ -345,7 +343,6 @@ def _check_fsm(fsm_state_path: str) -> str:
         try:
             with open(failures_log, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read()
-            import re
             entries = re.findall(r'## \[Darwinian Hook\] (Auto-intercepted Failure|Command Succeeded|Reflexion)', content)
             fail_streak = 0
             for entry in reversed(entries):
@@ -599,62 +596,63 @@ def enforce_bento_and_tdd_gates(workspace_dir: str, model_name: str, context_dir
             # For renamed files (R  old -> new), inspect the destination path
             if "->" in path_part:
                 path_part = path_part.split("->")[-1].strip()
-            modified_files.append(path_part)
-            code_files = [f for f in modified_files if f.endswith((".py", ".dart", ".ts", ".tsx", ".js", ".rs", ".go", ".kt"))]
-            test_files = [f for f in code_files if "test" in f.lower() or "spec" in f.lower()]
-            prod_files = [f for f in code_files if f not in test_files and not f.startswith(".agents")]
+            modified_files.append(path_part.strip('"'))
 
-            if model_name and any(m in model_name.lower() for m in ("flash", "haiku", "mini", "nano")):
-                if len(prod_files) > 3:
+        code_files = [f for f in modified_files if f.endswith((".py", ".dart", ".ts", ".tsx", ".js", ".rs", ".go", ".kt"))]
+        test_files = [f for f in code_files if "test" in f.lower() or "spec" in f.lower()]
+        prod_files = [f for f in code_files if f not in test_files and not f.startswith(".agents")]
+
+        if model_name and any(m in model_name.lower() for m in ("flash", "haiku", "mini", "nano")):
+            if len(prod_files) > 3:
+                warnings.append(
+                    f"BENTO-BOX HARD GATE VIOLATION: Active model '{model_name}' is BUDGET tier "
+                    f"but {len(prod_files)} production files are modified simultaneously ({', '.join(prod_files[:4])}). "
+                    "Commit or revert excess files before editing further."
+                )
+
+        fsm_file = os.path.join(context_dir, "execution_state.json")
+        adv_file = os.path.join(context_dir, "adversarial.json")
+        adv_active = False
+        if os.path.exists(adv_file):
+            try:
+                with open(adv_file, "r", encoding="utf-8") as _af:
+                    adv_data = json.load(_af)
+                ts = float(adv_data.get("timestamp", 0)) or os.path.getmtime(adv_file)
+                if time.time() - ts <= 600:
+                    adv_active = True
+            except Exception:
+                pass
+
+        if os.path.exists(fsm_file) and prod_files and not test_files and not adv_active:
+            try:
+                with open(fsm_file, "r", encoding="utf-8") as f:
+                    fsm = json.load(f)
+                if fsm.get("phase") == "TDD_RED":
                     warnings.append(
-                        f"BENTO-BOX HARD GATE VIOLATION: Active model '{model_name}' is BUDGET tier "
-                        f"but {len(prod_files)} production files are modified simultaneously ({', '.join(prod_files[:4])}). "
-                        "Commit or revert excess files before editing further."
+                        "STRICT TDD GATE VIOLATION: Production files were modified during TDD_RED phase "
+                        f"({', '.join(prod_files[:4])}) without a corresponding test file change. "
+                        "Write and run a failing test (Exit Code > 0) before modifying production code."
                     )
+            except Exception as _fsm_err:
+                _log_telemetry(_fsm_err, "tdd_rollback")
 
-            fsm_file = os.path.join(context_dir, "execution_state.json")
-            adv_file = os.path.join(context_dir, "adversarial.json")
-            adv_active = False
-            if os.path.exists(adv_file):
-                try:
-                    with open(adv_file, "r", encoding="utf-8") as _af:
-                        adv_data = json.load(_af)
-                    ts = float(adv_data.get("timestamp", 0)) or os.path.getmtime(adv_file)
-                    if time.time() - ts <= 600:
-                        adv_active = True
-                except Exception:
-                    pass
-
-            if os.path.exists(fsm_file) and prod_files and not test_files and not adv_active:
-                try:
-                    with open(fsm_file, "r", encoding="utf-8") as f:
-                        fsm = json.load(f)
-                    if fsm.get("phase") == "TDD_RED":
-                        warnings.append(
-                            "STRICT TDD GATE VIOLATION: Production files were modified during TDD_RED phase "
-                            f"({', '.join(prod_files[:4])}) without a corresponding test file change. "
-                            "Write and run a failing test (Exit Code > 0) before modifying production code."
-                        )
-                except Exception as _fsm_err:
-                    _log_telemetry(_fsm_err, "tdd_rollback")
-
-            # DNA Architecture Hard Gate (In-Flight Interception)
-            if prod_files:
-                try:
-                    from core.dna import lint_dependencies_path
-                    for pf in prod_files[:5]:
-                        full_pf = os.path.join(workspace_dir, pf)
-                        if os.path.isfile(full_pf):
-                            dna_viols = lint_dependencies_path(full_pf, root_dir=workspace_dir)
-                            if dna_viols:
-                                viol_desc = "; ".join(f"L{v['line']} ({v['from_tier']}->{v['to_tier']})" for v in dna_viols[:2])
-                                warnings.append(
-                                    f"DNA ARCHITECTURE HARD GATE VIOLATION: `{pf}` contains {len(dna_viols)} illegal cross-layer import(s) [{viol_desc}]. "
-                                    "Decouple illegal architectural dependencies before proceeding."
-                                )
-                                break
-                except Exception as _dna_gate_err:
-                    _log_telemetry(_dna_gate_err, "dna_in_flight_gate")
+        # DNA Architecture Hard Gate (In-Flight Interception)
+        if prod_files:
+            try:
+                from core.dna import lint_dependencies_path
+                for pf in prod_files[:5]:
+                    full_pf = os.path.join(workspace_dir, pf)
+                    if os.path.isfile(full_pf):
+                        dna_viols = lint_dependencies_path(full_pf, root_dir=workspace_dir)
+                        if dna_viols:
+                            viol_desc = "; ".join(f"L{v['line']} ({v['from_tier']}->{v['to_tier']})" for v in dna_viols[:2])
+                            warnings.append(
+                                f"DNA ARCHITECTURE HARD GATE VIOLATION: `{pf}` contains {len(dna_viols)} illegal cross-layer import(s) [{viol_desc}]. "
+                                "Decouple illegal architectural dependencies before proceeding."
+                            )
+                            break
+            except Exception as _dna_gate_err:
+                _log_telemetry(_dna_gate_err, "dna_in_flight_gate")
     except Exception as _e:
         _log_telemetry(_e, "bento_tdd_gates")
     return warnings
@@ -841,7 +839,6 @@ def main():
                     _t_lines = _tf.read().decode("utf-8", errors="replace").splitlines()
                     for _line in reversed(_t_lines):
                         if ".agents/skills/" in _line:
-                            import re
                             m_sk = re.search(r"\.agents/skills/([a-z0-9-]+)", _line)
                             if m_sk:
                                 HarnessEngine.record_skill_event(m_sk.group(1), "use")

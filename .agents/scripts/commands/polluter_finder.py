@@ -72,6 +72,11 @@ def run_bisect(leak_target: str, test_pattern: str, custom_runner: Optional[str]
     total = len(test_files)
     print(f"  • Found Tests      : {total} file(s)\n")
 
+    if target_path.exists():
+        print(f"❌ [POLLUTION ERROR] Pollution target already exists prior to bisect run: {leak_target}", file=sys.stderr)
+        print(f"   Remove the target file before running bisect, or clean the workspace.", file=sys.stderr)
+        return 2
+
     for idx, test_file in enumerate(test_files, 1):
         if target_path.exists():
             print(f"⚠️  Pollution target already exists prior to test {idx}/{total}: {test_file}")

@@ -123,8 +123,10 @@ def prune_unmatched_canons(target_agents_dir, active_framework):
         active_canon_dir = "flutter"
     elif fw_clean in ["python", "django", "fastapi", "flask"]:
         active_canon_dir = "python"
+    elif fw_clean in ["android", "kotlin", "jetpack-compose"]:
+        active_canon_dir = "android"
 
-    framework_canons = {"flutter", "react", "python"}
+    framework_canons = {"flutter", "react", "python", "android"}
 
     if os.path.exists(eco_dir):
         for item in os.listdir(eco_dir):
@@ -179,6 +181,36 @@ def prune_unmatched_canons(target_agents_dir, active_framework):
                     print(f"  -> Pruned irrelevant micro canon: canons/micro/{fname}")
                 except Exception as _me:
                     _log_telemetry(_me, f"prune_unmatched_canons:micro:{fname}")
+
+
+def prune_legacy_workflows(target_agents_dir):
+    """
+    Prunes deprecated standalone .agents/workflows/*.md files from spoke projects
+    now that workflows have fully graduated to skills. Preserves user task directories.
+    """
+    target_root = os.path.dirname(os.path.abspath(target_agents_dir))
+    if _is_foundation_hub_repo(target_root):
+        return
+    workflows_dir = os.path.join(target_agents_dir, "workflows")
+    if not os.path.isdir(workflows_dir):
+        return
+    pruned = 0
+    for item in os.listdir(workflows_dir):
+        fpath = os.path.join(workflows_dir, item)
+        if os.path.isfile(fpath) and item.endswith(".md"):
+            try:
+                os.remove(fpath)
+                pruned += 1
+            except Exception as e:
+                _log_telemetry(e, f"prune_legacy_workflows:{item}")
+    if pruned > 0:
+        print(f"  -> Pruned {pruned} deprecated workflow files from .agents/workflows/ (graduated to skills)")
+        try:
+            if not os.listdir(workflows_dir):
+                os.rmdir(workflows_dir)
+                print("  -> Removed empty deprecated .agents/workflows/ directory")
+        except Exception:
+            pass
 
 def _read_python_deps(root: str) -> set[str]:
     """Extract normalized package dependencies from requirements.txt or pyproject.toml."""
@@ -1104,6 +1136,7 @@ def cmd_deploy(args):
 
     if not args.dry_run:
         prune_unmatched_canons(target_agents_dir, framework)
+        prune_legacy_workflows(target_agents_dir)
 
     for root_file in ROOT_SYNC_FILES:
         src_root = os.path.join(foundation_dir, ".agents", root_file)
@@ -2913,7 +2946,7 @@ def cmd_setup(args: argparse.Namespace) -> None:
     gpu_label = f" | GPU: {hw.get('gpu_name')} ({vram_val} GB VRAM)" if hw.get("gpu_name") else ""
 
     print("\n╔════════════════════════════════════════════════════════════════════════════╗")
-    print("║ 🧠 ORIONCORTEX — ORION UNIFIED SETUP & DOCTOR WIZARD (v0.1.0)              ║")
+    print("║ 🧠 ORIONCORTEX — ORION UNIFIED SETUP & DOCTOR WIZARD (v0.1.1)              ║")
     print("╚════════════════════════════════════════════════════════════════════════════╝")
 
     print("\n[1/4] 💻 LAPTOP & 4-PILLAR DEPENDENCY DIAGNOSTIC")
@@ -3595,7 +3628,7 @@ def probe_local_ollama_for_vision(prompt: str, model: Optional[str] = None) -> O
 
     base_url = "http://127.0.0.1:11434"
     try:
-        req = urllib.request.Request(f"{base_url}/api/tags", headers={"User-Agent": "Orion/0.1.0"})
+        req = urllib.request.Request(f"{base_url}/api/tags", headers={"User-Agent": "Orion/0.1.1"})
         with urllib.request.urlopen(req, timeout=2.0) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             models = [m.get("name") for m in data.get("models", []) if m.get("name")]
@@ -3621,7 +3654,7 @@ def probe_local_ollama_for_vision(prompt: str, model: Optional[str] = None) -> O
         req = urllib.request.Request(
             f"{base_url}/api/generate",
             data=payload,
-            headers={"Content-Type": "application/json", "User-Agent": "Orion/0.1.0"}
+            headers={"Content-Type": "application/json", "User-Agent": "Orion/0.1.1"}
         )
         with urllib.request.urlopen(req, timeout=10.0) as resp:
             res_data = json.loads(resp.read().decode("utf-8"))

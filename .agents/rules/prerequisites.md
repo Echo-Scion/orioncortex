@@ -1,7 +1,7 @@
 ---
 description: Mandatory and optional prerequisites for the agent ecosystem and their explicit fallback strategies.
 activation: when a tool or command fails
-version: 0.1.0
+version: 0.1.1
 ---
 
 # 🛠️ Prerequisites & Graceful Fallbacks

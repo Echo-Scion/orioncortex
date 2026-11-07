@@ -81,10 +81,10 @@ Both **Micro-Commits** and **Trunk Discipline** are essential and operate togeth
      ```
      Never leave orphaned worktree directories on disk.
 
-## 4. The "Save Point" Protocol (Micro-Commits)
-- **Rule**: Treat Git commits like save points in a game during local development. **Do not wait for an entire complex task to be "done" before saving state.**
-- **Why**: LLM context windows drop details. Re-reading a file later can cause the AI to accidentally revert previous changes due to state misinterpretation.
-- **Action**: Commit immediately after *every* successful, significant sub-step, green test, or logic addition locally. If the task is complex, you MUST create multiple small local commits. At release or push time, squash these into a clean atomic release commit to preserve Trunk Discipline.
+## 4. The "Save Point" Protocol (Non-Destructive Checkpoints vs Git Commits)
+- **Rule**: Preserve intermediate state without wiping the uncommitted working-tree diff (`git diff HEAD`) required by delta verification gates (`verify --fast`, `adversarial --diff`, and `bento next --verify`).
+- **Interactive IDE Mode**: Do NOT run `git commit` automatically after sub-steps unless explicitly requested by the user. Rely on `orion.py fsm` / Bento checkpoints (`git stash create` object SHA recorded in `fsm_checkpoints`) for rollback safety while keeping edits visible in `git diff HEAD` until final verification passes.
+- **Autonomous Worktree / Daemon Mode**: Micro-commits are permitted ONLY inside isolated `.worktrees/<task-id>` branches, and delta verification gates MUST diff against the branch base commit (`git merge-base HEAD main`) rather than `HEAD`.
 
 ## 5. Security & Verification
 - **Drift Radar**: Execute `python .agents/scripts/orion.py verify_agents` before finalizing any commit modifying core logic to ensure AST sync.

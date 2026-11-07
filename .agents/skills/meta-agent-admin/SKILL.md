@@ -1,7 +1,7 @@
 ---
 name: meta-agent-admin
 description: >-
-  Governs the AI agent ecosystem, system evolution, context routing, and documentation standards. Use when creating or modifying rules, auditing the .agents ecosystem, managing skills, or building MCP bridges.
+  Use when creating or modifying rules, auditing the .agents ecosystem, managing skills, or building MCP bridges.
 ---
 # Meta-Agent Admin
 

@@ -41,7 +41,7 @@ def scan_migration(filepath):
                     findings.append(key_name)
     except Exception as e:
         print(f"Error reading file {filepath}: {e}")
-        return []
+        return ["FILE_READ_ERROR"]
     return findings
 
 
@@ -55,6 +55,11 @@ class MigrationActionVerifier(BaseActionVerifier):
         self.fix_hint = None
 
     def verify_action(self, filepath: str):
+        if not os.path.isfile(filepath):
+            self.is_legal = False
+            self.violated_rule = "FILE_NOT_FOUND"
+            self.fix_hint = f"Migration file does not exist: {filepath}"
+            return False, self.violated_rule
         findings = scan_migration(filepath)
         if findings:
             if hasattr(self, 'log_violation'):

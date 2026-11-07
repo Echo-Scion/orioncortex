@@ -1,7 +1,7 @@
 ---
 name: integrity-sentinel
 description: >-
-  Unified quality enforcement hub and QA sentinel. Use when auditing code security, AI/LLM/MCP threats (prompt injection, RAG, slopsquatting), memory/FFI safety, desktop/mobile IPC, load testing, false-green consequence verification, or pre-completion gates.
+  Use when auditing code security, AI/LLM threats, memory/FFI safety, desktop/mobile IPC, false-green consequence verification, or pre-completion gates.
 ---
 # Integrity Sentinel & Quality Hub (`integrity-sentinel`)
 

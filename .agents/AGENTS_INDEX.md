@@ -1,5 +1,5 @@
 ---
-description: Master index linking all components (Rules, Skills, Workflows) of the agent ecosystem.
+description: Master index linking all components (Rules, Skills, Tier-3 References, and Canons) of the agent ecosystem.
 activation: when navigating the ecosystem or seeking an overview of agent capabilities
 ---
 # 🗺️ AGENTS MASTER INDEX
@@ -111,7 +111,7 @@ activation: when navigating the ecosystem or seeking an overview of agent capabi
 - **visual-engineering**: `.agents/skills/ui-finish/references/visual_engineering.md` (Restrained typography, layout, and visual craft)
 
 ## 3. 🚀 PROCEDURAL PLAYBOOKS (Modern Skills Architecture)
-*The ecosystem has fully graduated to a modern, 100% Skills-only architecture in alignment with Antigravity conventions. Legacy `.agents/workflows/` files have been safely archived to `.agents/archive/workflows/`. All playbooks and compound orchestrations are integrated directly as primary skills or Tier-3 references accessible via native IDE slash commands (e.g. `/strict-tdd`, `/self-evolve`, `/integrity-sentinel`, `/app-lifecycle`).*
+*The ecosystem has fully graduated to a modern, 100% Skills-only architecture in alignment with Antigravity conventions. Legacy workflow files have been superseded by domain skills and Tier-3 references. All playbooks and compound orchestrations are integrated directly as primary skills or Tier-3 references accessible via native IDE slash commands (e.g. `/strict-tdd`, `/self-evolve`, `/integrity-sentinel`, `/app-lifecycle`).*
 
 - **app-builder**: `.agents/skills/app-lifecycle/references/app-builder.md`
 - **app-lifecycle**: `.agents/skills/app-lifecycle/SKILL.md`

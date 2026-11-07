@@ -68,6 +68,7 @@ class TestSacredFileShield(unittest.TestCase):
         ]
         for p in allowed:
             self.assertFalse(SacredFileShield.is_shielded(p), f"Path should be upgradeable: {p}")
+        self.assertEqual(len(allowed), 8)
 
 
 class TestSurgicalBiosSplicer(unittest.TestCase):

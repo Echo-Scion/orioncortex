@@ -103,6 +103,8 @@ class ConsequencePredicate:
 
         if kind == PredicateKind.ALL_OF:
             sub_preds = predicate.get("predicates", [])
+            if not sub_preds:
+                return False, "allOf requires at least one predicate"
             for sub in sub_preds:
                 ok, reason = ConsequencePredicate.evaluate(sub, trace)
                 if not ok:
@@ -135,8 +137,10 @@ class ConsequencePredicate:
 
         elif kind == PredicateKind.NET:
             expected_method = predicate.get("method", "GET").upper()
-            expected_url = predicate.get("urlContains", "")
+            expected_url = predicate.get("urlContains") or predicate.get("url") or ""
             expected_status = predicate.get("status")
+            if not expected_url and expected_status is None:
+                return False, "net predicate requires urlContains/url or status"
             must_be_consumed = predicate.get("consumed", True)
             requests = trace.get("network", [])
             for req in requests:
@@ -195,6 +199,8 @@ class ConsequencePredicate:
         elif kind == PredicateKind.ROUTE:
             expected_path = predicate.get("path", "")
             expected_query = predicate.get("queryContains", {})
+            if not expected_path and not expected_query:
+                return False, "route predicate requires path or queryContains"
             route_data = trace.get("route", {})
             current_path = route_data.get("path", "")
             current_query = route_data.get("query", {})
@@ -209,6 +215,8 @@ class ConsequencePredicate:
 
         elif kind == PredicateKind.DOM:
             selector = predicate.get("selector", "")
+            if not selector:
+                return False, "dom predicate requires non-empty selector"
             expected_text = predicate.get("textContains", "")
             should_exist = predicate.get("exists", True)
             dom_data = trace.get("dom", {})
@@ -270,8 +278,13 @@ class FalseGreenScanner:
         findings = []
         lines = content.splitlines()
 
-        # Test block detection (it, test, def test_, testWidgets) - negative lookbehind prevents matching .test(...)
-        test_block_pattern = re.compile(r'(?<!\.)\b(?:it|test|def\s+test_\w+|testWidgets)\s*\((?:["\']([^"\']+)["\'])?', re.IGNORECASE)
+        # Language-accurate test block detection
+        if filename.endswith(".py"):
+            test_block_pattern = re.compile(r'^\s*def\s+(test_\w+)\s*\(', re.MULTILINE)
+        elif filename.endswith(".dart"):
+            test_block_pattern = re.compile(r'(?<!\.)\b(?:test|testWidgets)\s*\(\s*["\']([^"\']+)["\']', re.IGNORECASE)
+        else:
+            test_block_pattern = re.compile(r'(?<!\.)\b(?:it|test)\s*\(\s*["\']([^"\']+)["\']', re.IGNORECASE)
 
         current_test: Optional[str] = None
         current_lines: List[str] = []
@@ -391,6 +404,15 @@ class FlowSpecRunner:
         flow_name = flow_spec.get("name", "anonymous_flow")
         steps = flow_spec.get("steps", [])
         success_pred = flow_spec.get("success", {})
+
+        if not steps and not success_pred:
+            return {
+                "name": flow_name,
+                "outcome": SpecOutcome.FAIL.value,
+                "message": SpecMessage.SUCCESS_NOT_MET.value,
+                "reason": "Flow specification has neither steps nor success predicate",
+                "steps": []
+            }
 
         # If trace has no instrumented surfaces, return UNKNOWN rather than vacuous PASS
         instrumented_keys = [k for k, v in trace.items() if v and isinstance(v, (dict, list))]

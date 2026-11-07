@@ -110,10 +110,13 @@ class CorpusInformationCompactor:
         if os.path.exists(self.db_path):
             try:
                 self.conn = connect_sqlite(self.db_path)
-                self.conn.execute(
-                    "CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts_vocab "
-                    "USING fts5vocab(pages_fts, row);"
-                )
+                cur = self.conn.cursor()
+                cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pages_fts'")
+                if cur.fetchone():
+                    self.conn.execute(
+                        "CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts_vocab "
+                        "USING fts5vocab(pages_fts, row);"
+                    )
             except Exception as _e:
                 _log_telemetry(_e, "CorpusInformationCompactor:init")
 

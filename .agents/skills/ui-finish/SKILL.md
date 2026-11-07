@@ -1,7 +1,7 @@
 ---
 name: ui-finish
 description: >-
-  Applies premium, restrained aesthetics (Linear, Raycast, Stripe), visual engineering, design tokens, craft floor rules, bento grids, 60fps motion, and accessibility contracts. Use when applying UI polish, designing micro-interactions, refining typography, or creating design tokens.
+  Use when applying UI polish, designing micro-interactions, refining typography, or creating design tokens.
 ---
 
 # UI & Visual Design Architect (Restrained Visual Engineering)

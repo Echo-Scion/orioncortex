@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="VERSION"><img src="https://img.shields.io/badge/version-v0.1.0-blue.svg?style=flat-square" alt="Version"></a>
+  <a href="VERSION"><img src="https://img.shields.io/badge/version-v0.1.1-blue.svg?style=flat-square" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg?style=flat-square" alt="License"></a>
   <a href="#-the-four-anchored-pillars"><img src="https://img.shields.io/badge/core-Python%203.10%2B%20Stdlib-brightgreen.svg?style=flat-square" alt="Core"></a>
   <a href="#-the-four-anchored-pillars"><img src="https://img.shields.io/badge/database-SQLite3%20WAL-informational.svg?style=flat-square" alt="Database"></a>
@@ -63,7 +63,7 @@ Every subsystem addresses a systemic failure mode of autonomous AI coding throug
 
 ### 3. 🧭 Master BIOS, JIT Router & Communication Protocols (`AGENTS.md`, `rules/`, `cost-optimizer` / `lessword`)
 * **Problem**: Massive static system prompts trigger "Lost in the Middle" attention degradation, models waste 60%–80% of their output tokens on polite filler and bureaucratic hedging, and behavior diverges wildly across fragmented AI IDEs (Antigravity, Cursor, Claude Code, VS Code).
-* **How it Works**: Anchors autonomous behavior in a single Master BIOS (`AGENTS.md`) with a 37-row Just-In-Time (JIT) knowledge router featuring bilingual (ID/EN) intent normalization, child reference routing, and active hook surfacing that loads targeted procedural runbooks on Turn 1 and deploys lightweight pointer adapters (`GEMINI.md`, `CLAUDE.md`) across 19 supported AI coding hosts. Enforces the Lessword communication protocol (ASD-STE100 concise engineering English cutting token bloat by ~75%) and mandates a deterministic 4-line Response Footer with explicit model tier recommendations.
+* **How it Works**: Anchors autonomous behavior in a single Master BIOS (`AGENTS.md`) with a 49-row Just-In-Time (JIT) knowledge router (14 foundation rules + 35 skill/lifecycle routes) featuring bilingual (ID/EN) intent normalization, child reference routing, and active hook surfacing that loads targeted procedural runbooks on Turn 1 and deploys lightweight pointer adapters (`GEMINI.md`, `CLAUDE.md`) across 19 supported AI coding hosts. Enforces the Lessword communication protocol (ASD-STE100 concise engineering English cutting token bloat by ~75%) and mandates a deterministic 4-line Response Footer with explicit model tier recommendations.
 * 📖 *Deep Dive: [.agents/docs/04-rule_library___rules.md](.agents/docs/04-rule_library___rules.md)*
 
 ### 4. 🧬 Living Architectural DNA & 5-Vector SemVer Gravity Engine (`core/dna.py`)
@@ -105,7 +105,7 @@ The runtime works out-of-the-box with **only Python 3.10+**. Optional native bin
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                            Master BIOS (AGENTS.md)                         │
-│        37-Row JIT Knowledge Router • Iron Evidence Law • Lessword Mode     │
+│        49-Row JIT Knowledge Router • Iron Evidence Law • Lessword Mode     │
 └─────────────────────────────────────┬──────────────────────────────────────┘
                                       ▼
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -224,8 +224,8 @@ You can either run commands directly via the unified `orion.py` CLI or copy-past
 | **UI Aesthetics & Anti-Slop Audit** | `"Audit UI tokens, 8pt spatial grid, and prose anti-slop rules"` | `python .agents/scripts/orion.py eval --dir src/` |
 | **AST Security & Secret Scan** | `"Scan codebase for AST vulnerabilities, secrets, and Trojan Unicode"` | `python .agents/scripts/orion.py scan security .` |
 | **Delta Mutation Testing** | `"Run delta-scoped AST mutation testing against our recent git diff"` | `python .agents/scripts/orion.py adversarial mutate <f> --diff` |
-| **Context Bundling for Web Audits** | `"Pack codebase into at most 10 balanced Markdown bundles for web review"` | `python .agents/scripts/orion.py pack [arch|hybrid|full|pr]` |
-| **Clean GitHub-Push Repository ZIP** | `"Export clean repository ZIP mirroring GitHub push state (respecting .gitignore)"` | `python .agents/scripts/orion.py pack --zip [--out <path>]` |
+| **Context Bundling for Web Audits** | `"Pack codebase into at most 10 balanced Markdown bundles for web review"` | `python .agents/scripts/orion.py pack [arch|hybrid|full|pr]` *(or `pack --zip` for repository archive)* |
+| **Clean GitHub-Push Repository ZIP** | `"Export clean repository ZIP mirroring GitHub push state (respecting .gitignore)"` | `python .agents/scripts/orion.py pack zip` *(or `pack --zip [--out <path>]`)* |
 | **Habit & Friction Observation** | `"Record developer friction or recurring bug pattern in observations"` | `python .agents/scripts/orion.py observe "fix" --target rules` |
 | **Expand Anchor Recall** | `"Expand raw recall turns behind memory anchor O1"` | `python .agents/scripts/orion.py brain recall O1` |
 | **Generational Memory Rollover** | `"Trigger zero-LLM generational memory rollover with Shannon surprisal"` | `python .agents/scripts/orion.py brain rollover` |

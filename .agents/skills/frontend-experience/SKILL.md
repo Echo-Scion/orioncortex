@@ -1,12 +1,12 @@
 ---
 name: frontend-experience
 description: >-
-  Orchestrates frontend architecture audits, 4-state component lifecycle, and UI debugging. Use when auditing frontend components, debugging UI state anomalies, verifying form interactions, or testing browser/widget trees.
+  Use when auditing frontend components, debugging UI state anomalies, verifying form interactions, or inspecting widget trees.
 ---
 # Frontend Experience
 
 Your primary role is to audit and debug frontend architecture.
-*(Note: For purely aesthetic/animation polish, you MUST execute `view_file .agents/skills/ui-finish/SKILL.md` NOW.)*
+*(If the task specifically requests visual styling, color tokens, or motion polish rather than state/logic debugging, load .agents/skills/ui-finish/SKILL.md instead.)*
 
 ## JIT Tool Directives (Execute this FIRST)
 1. **Detect Ecosystem**: Check the project root for ecosystem markers (`pubspec.yaml` = Flutter, `package.json` = Node/React, `Cargo.toml` = Rust).

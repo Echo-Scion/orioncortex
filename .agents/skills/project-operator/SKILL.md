@@ -1,7 +1,7 @@
 ---
 name: project-operator
 description: >-
-  Coordinates production deployments, release manager workflows, pre-flight readiness gates, and chaos engineering experiments. Use when preparing production releases, executing deployment pre-flight checks, managing version tags, or running chaos resilience audits.
+  Use when preparing production releases, executing deployment pre-flight checks, managing version tags, or running chaos resilience audits.
 ---
 # Project Operator
 

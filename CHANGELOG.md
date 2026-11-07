@@ -8,6 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 
 
+## [0.1.1] - 2026-11-07
+
+### Added
+- **14-Rule JIT BIOS Routing**: Added comprehensive JIT knowledge routing in the Master BIOS (`AGENTS.md`) and deployment templates, mapping all 14 foundation rules directly alongside domain skills.
+- **Automated Rule JIT Parity Gate**: Added deterministic mechanical verification in `verify_agents.py` ensuring every foundation rule file remains actively mapped in the BIOS routing table.
+- **Legacy Spoke Workflow Pruning**: Added automated pruning of deprecated standalone `.agents/workflows/*.md` files during `foundation deploy` to ensure spoke projects stay aligned with modern skills architecture.
+- **Deterministic Harness Consequence Verification**: Added consequence verifier and negative-cache capabilities probe preventing socket timeouts and deterministic hallucinations across verifier scripts.
+- **Companion Private Vault Synchronization**: Added dual-remote private backup architecture (`orioncortex-vault`) and non-destructive Git plumbing for isolated maintainer assets.
+
+### Changed
+- **BIOS Lessword Compression**: Tightened root operational instructions to guarantee full 49-entry JIT routing capacity while remaining strictly below the 24,000-byte per-file ceiling.
+- **SOP Documentation Alignment**: Updated procedural playbook documentation and indices to reflect the modern Skills-only standard without referencing obsolete workflow archives.
+- **Trigger-Only Frontmatter Enforcement**: Normalized all 21 domain skill frontmatters to strict `Use when...` triggers preventing LLM shortcutting.
+
+### Fixed
+- **SemVer AST Surface Unpacking & Sub-Organ Granularity**: Fixed tuple unpacking when computing public AST symbol surface deltas and resolved off-by-one path stripping during sub-organ entropy discovery.
+- **Unified Multi-Provider Worker & Execution Routing**: Connected multi-provider API slot resolution across worker status diagnostics, elastic 4-lane routing, neuro-symbolic fallbacks, embeddings, and offline handoff queuing.
+- **Transactional Upgrade Shield & Hydration Preservation**: Added decision ledgers to the sacred upgrade shield, preserved hydrated project and framework tokens during surgical BIOS splicing, and enabled deprecated workflow pruning during spoke upgrades.
+- **Android Ecosystem Canon Parity & Cross-Platform Gradle**: Completed all 7 canonical JIT runbooks for the Android ecosystem, included Android in stack-aware canon pruning, and standardized cross-platform Gradle wrapper invocations.
+- **Aesthetic Concentric Geometry & Linkify Help Guard**: Added mathematical concentric border-radius and Kotlin Compose scanning to the aesthetic evaluator, indexed skill references for wikilink verification, and prevented help flags from triggering workspace linkification.
+- **GraphRAG Self-Referential Section Filtering**: Purged isolated same-document section edges, focusing semantic knowledge graphs strictly on high-signal cross-document relationships.
+
 ## [0.1.0] - 2026-11-07
 
 ### Added

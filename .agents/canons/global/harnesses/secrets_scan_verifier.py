@@ -29,23 +29,20 @@ except Exception:
 # Common patterns for secrets (unified from core.security)
 try:
     from core.security import SECRET_PATTERNS as _CANON_SECRET_PATTERNS
-    SECRET_PATTERNS = {
-        name: pat.pattern if hasattr(pat, 'pattern') else str(pat)
-        for name, pat in _CANON_SECRET_PATTERNS
-    }
+    SECRET_PATTERNS = _CANON_SECRET_PATTERNS
 except Exception:
-    SECRET_PATTERNS = {
-        'AWS Access Key': r'AKIA[0-9A-Z]{16}',
-        'Stripe Standard Key': r'sk_live_[0-9a-zA-Z]{24}',
-        'Stripe Test Key': r'sk_test_[0-9a-zA-Z]{24}',
-        'Google API Key': r'AIza[0-9A-Za-z\-_]{35}',
-        'Bearer_Token': r'Bearer' + r'\s+[a-zA-Z0-9\-\._~+/]+=*',
-        'Generic Private Key': r'-----BEGIN ' + r'PRIVATE KEY-----',
-        'OpenAI API Key': r'sk-[a-zA-Z0-9]{48}',
-        'GitHub Token': r'ghp_[a-zA-Z0-9]{36}',
-        'Telegram Bot Token': r'[0-9]{9,10}:[a-zA-Z0-9_-]{35}',
-        'JWT / Supabase Key': r'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+'
-    }
+    SECRET_PATTERNS = [
+        ('AWS Access Key', re.compile(r'AKIA[0-9A-Z]{16}', re.IGNORECASE)),
+        ('Stripe Standard Key', re.compile(r'sk_live_[0-9a-zA-Z]{24}', re.IGNORECASE)),
+        ('Stripe Test Key', re.compile(r'sk_test_[0-9a-zA-Z]{24}', re.IGNORECASE)),
+        ('Google API Key', re.compile(r'AIza[0-9A-Za-z\-_]{35}', re.IGNORECASE)),
+        ('Bearer_Token', re.compile(r'Bearer\s+[a-zA-Z0-9\-\._~+/]+=*', re.IGNORECASE)),
+        ('Generic Private Key', re.compile(r'-----BEGIN PRIVATE KEY-----', re.IGNORECASE)),
+        ('OpenAI API Key', re.compile(r'sk-[a-zA-Z0-9]{48}', re.IGNORECASE)),
+        ('GitHub Token', re.compile(r'ghp_[a-zA-Z0-9]{36}', re.IGNORECASE)),
+        ('Telegram Bot Token', re.compile(r'[0-9]{9,10}:[a-zA-Z0-9_-]{35}', re.IGNORECASE)),
+        ('JWT / Supabase Key', re.compile(r'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+', re.IGNORECASE))
+    ]
 
 IGNORE_DIRS = {'.git', 'node_modules', '__pycache__', '.orion', 'venv', 'env', 'scratch', 'build', 'dist'}
 
@@ -57,12 +54,17 @@ def scan_file(filepath):
     try:
         with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
             for i, line in enumerate(f, 1):
-                for key_name, pattern in SECRET_PATTERNS.items():
-                    if re.search(pattern, line):
-                        # Simple masking to prevent logging the actual secret
+                for item in SECRET_PATTERNS:
+                    key_name = item[0] if isinstance(item, (list, tuple)) else str(item)
+                    pattern = item[1] if isinstance(item, (list, tuple)) else SECRET_PATTERNS[key_name]
+                    if hasattr(pattern, 'search'):
+                        if pattern.search(line):
+                            findings.append((i, key_name))
+                    elif re.search(pattern, line, re.IGNORECASE):
                         findings.append((i, key_name))
     except Exception as e:
         sys.stderr.write(f"[WARN] Secrets scan could not read {filepath}: {e}\n")
+        return [(0, "FILE_READ_ERROR")]
     return findings
 
 
@@ -76,6 +78,11 @@ class SecretsActionVerifier(BaseActionVerifier):
         self.fix_hint = None
 
     def verify_action(self, filepath: str):
+        if not os.path.isfile(filepath):
+            self.is_legal = False
+            self.violated_rule = "FILE_NOT_FOUND"
+            self.fix_hint = f"File does not exist: {filepath}"
+            return False, self.violated_rule
         findings = scan_file(filepath)
         if findings:
             violation = f"{findings[0][1]} on line {findings[0][0]}"
@@ -85,7 +92,7 @@ class SecretsActionVerifier(BaseActionVerifier):
                 self.is_legal = False
                 self.violated_rule = "NO_HARDCODED_SECRETS"
                 self.fix_hint = f"Remove hardcoded secret: {violation}"
-            return False, self.violated_rule
+            return False, violation
         self.is_legal = True
         return True, None
 

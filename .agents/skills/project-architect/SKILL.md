@@ -1,7 +1,7 @@
 ---
 name: project-architect
 description: >-
-  Synthesizes complex requirements into technical PRDs, database schemas, and architectural blueprints. Use when designing system architecture, drafting database schemas, defining third-party integrations, reviewing technical blueprints, or conducting multi-lens spec reviews.
+  Use when designing system architecture, drafting database schemas, defining third-party integrations, or reviewing technical blueprints.
 ---
 # Project Architect
 

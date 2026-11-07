@@ -9,6 +9,7 @@ import subprocess
 from collections import defaultdict
 from typing import Dict, List, Set, Tuple, Any, Optional
 import sqlite3
+import ast
 
 _WINDOWLESS_FLAGS = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if sys.platform == "win32" else 0
 
@@ -347,7 +348,6 @@ def skeletonize_python(code: str, include_line_numbers: bool = False) -> str:
     Supports source-true line numbers and preserves try/except fallback blocks.
     """
     try:
-        import ast
         tree = ast.parse(code)
     except SyntaxError:
         if include_line_numbers:
@@ -1522,7 +1522,6 @@ def extract_file_symbols(file_path: str, conn: Optional[Any] = None) -> Tuple[Di
         try:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read()
-            import ast
 
             class PySymbolVisitor(ast.NodeVisitor):
                 def __init__(self):
@@ -1698,7 +1697,6 @@ def extract_file_symbols(file_path: str, conn: Optional[Any] = None) -> Tuple[Di
                         from core.db import connect_sqlite
                         write_conn = connect_sqlite(cache_db_path, timeout_sec=5.0, read_only=False)
                     except ImportError:
-                        import sqlite3
                         write_conn = sqlite3.connect(cache_db_path, timeout=5.0)
                     close_write = True
                 except (OSError, sqlite3.Error) as _e:

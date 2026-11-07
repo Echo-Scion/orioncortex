@@ -1,7 +1,7 @@
 ---
 name: api-contract
 description: >-
-  Defines strict request/response data contracts, validation schemas (Zod, OpenAPI), and API safety layers. Use when designing API endpoints, validating request payloads, or creating data transfer contracts.
+  Use when defining, validating, or modifying API data contracts, request/response validation schemas (Zod, OpenAPI), or boundary safety layers.
 ---
 # API Contract Guard
 

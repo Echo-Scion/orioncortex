@@ -54,12 +54,16 @@ class ChangelogGateTests(unittest.TestCase):
 
     def test_missing_file(self):
         with tempfile.TemporaryDirectory() as d:
-            self.assertFalse(_check_changelog_unreleased(d)[0])
+            ok, reason = _check_changelog_unreleased(d)
+            self.assertFalse(ok)
+            self.assertIn("not found", reason.lower())
 
     def test_empty_unreleased_rejected(self):
         with tempfile.TemporaryDirectory() as d:
             self._write(d, "# Changelog\n\n## [Unreleased]\n\n## [1.0.0]\n- Added x\n")
-            self.assertFalse(_check_changelog_unreleased(d)[0])
+            ok, reason = _check_changelog_unreleased(d)
+            self.assertFalse(ok)
+            self.assertIn("unreleased", reason.lower())
 
     def test_populated_unreleased_accepted(self):
         with tempfile.TemporaryDirectory() as d:
@@ -97,7 +101,9 @@ class RunnerAndHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             args = SimpleNamespace(target=d, dry_run=True, pre_push_hook=False, skip_tests=True,
                                    remote="origin", branch="main")
-            self.assertFalse(cmd_project_push(args))
+            ret = cmd_project_push(args)
+            self.assertFalse(ret)
+            self.assertEqual(ret, False)
 
 
 if __name__ == "__main__":

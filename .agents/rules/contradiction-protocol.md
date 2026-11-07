@@ -1,7 +1,7 @@
 ---
 description: Contradiction Resolution Protocol for .orion/ graph integrity.
 activation: triggered during orion_ops ingest and brain sync
-version: 0.1.0
+version: 0.1.1
 last_updated: 2026-06-30
 ---
 

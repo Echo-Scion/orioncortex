@@ -1,7 +1,7 @@
 ---
 name: app-lifecycle
 description: >-
-  Orchestrates end-to-end full lifecycle state machine routing across project initialization, feature construction, TDD, and sunsetting. Use when scaffolding new projects, migrating existing codebases, building end-to-end features, or retiring deprecated components.
+  Use when scaffolding new projects, migrating legacy codebases, building end-to-end features, or sunsetting deprecated components.
 ---
 
 # 🔄 Full Lifecycle Pipeline (`/full-lifecycle` / `/app-lifecycle`)

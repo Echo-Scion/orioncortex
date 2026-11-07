@@ -1,7 +1,7 @@
 ---
 name: saas-strategist
 description: >-
-  Orchestrates SaaS business strategy, viability scorecards, and product growth models. Use when evaluating product ideas, defining monetization models, drafting product context, or assessing feature viability.
+  Use when evaluating product strategy, defining monetization models, drafting product context, or assessing feature viability.
 ---
 # SaaS Strategist
 

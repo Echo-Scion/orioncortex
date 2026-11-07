@@ -230,7 +230,7 @@ def main(args: Optional[List[str]] = None) -> int:
         args = sys.argv[1:]
 
     # Strip command name if invoked via orion.py
-    if args and args[0].lower() == "constellation":
+    if args and args[0].lower() in ("constellation", "galaxy", "portfolio"):
         args = args[1:]
 
     parser = argparse.ArgumentParser(description="Orion Constellation Multi-Project Knowledge Mesh & Vault Manager")

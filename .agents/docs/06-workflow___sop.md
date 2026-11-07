@@ -24,7 +24,9 @@ In the `.agents` ecosystem, procedural workflows are organized according to the 
 
 ---
 
-## Chapter 14: The 18 Canonical Operating Procedures
+## Chapter 14: Canonical Operating Procedures (Skills & Tier-3 SOPs)
+
+In the modern Antigravity architecture, standalone `.agents/workflows/` files have been fully superseded by **Skills** (`.agents/skills/<name>/SKILL.md`) and Tier-3 Reference SOPs. Operational procedures execute directly via native slash commands (`/<skill-name>`) and dynamic JIT routing from the Master BIOS (`AGENTS.md`) into modular `.agents/rules/` and domain skills:
 
 ### 14.1. Lifecycle & Scaffolding SOPs
 1. **`app-lifecycle` (`/app-lifecycle`)**: Master Full Lifecycle Pipeline. Evaluates project maturity and orchestrates phased progression through the state machine.

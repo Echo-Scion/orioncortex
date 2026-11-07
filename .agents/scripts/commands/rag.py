@@ -203,7 +203,9 @@ class RAGDiagnosticJudge:
 def diagnostics_main(argv=None):
     judge = RAGDiagnosticJudge()
     stats = judge.get_summary()
-    print(f"RAG Diagnostics Initialized. Total Evaluations: {stats['eval_count']}")
+    print(f"RAG Diagnostics Initialized. Total Evaluations: {stats.get('eval_count', 0)}")
+    print(f"Mean Relevance: {stats.get('mean_relevance', 0.0):.2%}")
+    print(f"Context Coverage: {stats.get('mean_faithfulness', 0.0):.2%}")
     judge.close()
     return 0
 
@@ -543,6 +545,10 @@ def sync(intent: str, delta: bool = False) -> None:
                                 seed_clean = seed_path.replace("\\", "/")
                                 seed_base = os.path.basename(seed_path)
                                 seed_stem = os.path.splitext(seed_base)[0]
+                                if seed_base.lower() in ("skill.md", "readme.md", "index.md", "ecosystem.json"):
+                                    seed_like = seed_clean
+                                else:
+                                    seed_like = f"%{seed_base}"
 
                                 c.execute('''
                                     SELECT subject_id, predicate, object_id, weight
@@ -550,7 +556,7 @@ def sync(intent: str, delta: bool = False) -> None:
                                     WHERE (subject_id = ? OR subject_id = ? OR subject_id LIKE ? OR source_path = ?)
                                       AND lower(predicate) != 'has_section'
                                     ORDER BY weight DESC LIMIT 6
-                                ''', (seed_path, seed_clean, f"%{seed_base}", seed_path))
+                                ''', (seed_path, seed_clean, seed_like, seed_path))
                                 for src, rel, tgt, conf in c.fetchall():
                                     hop_triplets.append((os.path.basename(src), rel, tgt))
                                     _resolve_neighbor_target(c, tgt, workspace_dir, neighbor_files)
@@ -561,7 +567,7 @@ def sync(intent: str, delta: bool = False) -> None:
                                     WHERE (object_id = ? OR object_id = ? OR object_id = ? OR object_id LIKE ?)
                                       AND lower(predicate) != 'has_section'
                                     ORDER BY weight DESC LIMIT 6
-                                ''', (seed_path, seed_clean, seed_stem, f"%{seed_base}"))
+                                ''', (seed_path, seed_clean, seed_stem, seed_like))
                                 for src, rel, tgt, conf in c.fetchall():
                                     hop_triplets.append((os.path.basename(src), rel, os.path.basename(tgt)))
                                     _resolve_neighbor_target(c, src, workspace_dir, neighbor_files)
@@ -572,7 +578,7 @@ def sync(intent: str, delta: bool = False) -> None:
                                         SELECT name FROM entities
                                         WHERE source_path = ? OR source_path = ? OR source_path LIKE ?
                                         LIMIT 5
-                                    ''', (seed_path, seed_clean, f"%{seed_base}"))
+                                    ''', (seed_path, seed_clean, seed_like))
                                     for (ent_name,) in c.fetchall():
                                         c.execute('''
                                             SELECT subject_id, predicate, object_id FROM relations
@@ -798,7 +804,9 @@ def sync(intent: str, delta: bool = False) -> None:
                     for entry in entries:
                         filepath = entry.get("filepath", "").lower()
                         if any(kw in filepath for kw in keywords):
-                            wiki_hits.append(os.path.basename(entry.get("orion_file", "")).replace(".md", ""))
+                            rel_target = entry.get("filepath", "") or entry.get("orion_file", "")
+                            if rel_target:
+                                wiki_hits.append(rel_target.replace("\\", "/"))
         except Exception as _e:
             _log_telemetry(_e, 'rag.py:manifest_rag')
 

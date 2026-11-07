@@ -2359,29 +2359,18 @@ def ingest_file(filepath: str, autonomy_level="balanced", manifest=None, log_lin
                                 VALUES (?, ?, ?, 1.0, ?)
                             ''', (target_path, name, relation, target_path))
 
-                    # Deterministic Markdown Header & Section Hierarchy Extraction
-                    headings = re.findall(r'(?m)^(#{1,4})\s+(.+)$', text_no_code)
-                    parent_stack = []
-                    for h_hashes, h_title in headings:
-                        h_level = len(h_hashes)
-                        clean_title = re.sub(r'\[.*?\]|\(.*?\)|[*_`]', '', h_title).strip()
-                        if not clean_title:
-                            continue
-                        section_id = f"{target_path}#{clean_title.lower().replace(' ', '-')[:40]}"
-                        c.execute('''
-                            INSERT OR IGNORE INTO nodes (id, type, name, source_path)
-                            VALUES (?, ?, ?, ?)
-                        ''', (section_id, 'MarkdownSection', clean_title, target_path))
-                        
-                        while parent_stack and parent_stack[-1][0] >= h_level:
-                            parent_stack.pop()
-                            
-                        parent_id = parent_stack[-1][1] if parent_stack else target_path
-                        c.execute('''
-                            INSERT OR IGNORE INTO edges (source_id, target_id, relation, confidence, source_path)
-                            VALUES (?, ?, 'has_section', 1.0, ?)
-                        ''', (parent_id, section_id, target_path))
-                        parent_stack.append((h_level, section_id))
+                    # Deterministic Cross-Document Link Extraction (Replacing self-referential MarkdownSection hierarchy)
+                    doc_refs = re.findall(r'`(\.agents/(?:rules|skills|canons)/[A-Za-z0-9_./-]+\.(?:md|json|py))`', text_no_code)
+                    for ref in set(doc_refs):
+                        if ref != target_path:
+                            c.execute('''
+                                INSERT OR IGNORE INTO nodes (id, type, name, source_path)
+                                VALUES (?, ?, ?, ?)
+                            ''', (ref, 'Document', os.path.basename(ref), target_path))
+                            c.execute('''
+                                INSERT OR IGNORE INTO edges (source_id, target_id, relation, confidence, source_path)
+                                VALUES (?, ?, 'references', 1.0, ?)
+                            ''', (target_path, ref, target_path))
                 # --- Structural Triplets ---
                 if ext.lower() in RAW_EXTS and 'triplets' in locals() and triplets:
                     c.execute('''
@@ -2863,8 +2852,24 @@ def find_target_file(query):
     try:
         conn = get_db()
         c = conn.cursor()
-        c.execute('SELECT path FROM pages WHERE path LIKE ? ORDER BY length(path) ASC, path ASC', (f'%{query}%',))
+        clean_q = query.replace('\\', '/').strip('/')
+        ws_norm = WORKSPACE_DIR.replace('\\', '/').strip('/')
+        if clean_q.lower().startswith(ws_norm.lower()):
+            clean_q = clean_q[len(ws_norm):].lstrip('/')
+        elif '.agents/' in clean_q:
+            clean_q = '.agents/' + clean_q.split('.agents/', 1)[1]
+
+        # 1. Exact canonical path match
+        c.execute('SELECT path FROM pages WHERE path = ?', (clean_q,))
         row = c.fetchone()
+        if not row:
+            # 2. Exact suffix match (filename or terminal path component)
+            c.execute('SELECT path FROM pages WHERE path LIKE ? ORDER BY length(path) ASC, path ASC', (f'%/{clean_q}',))
+            row = c.fetchone()
+        if not row:
+            # 3. Substring match fallback
+            c.execute('SELECT path FROM pages WHERE path LIKE ? ORDER BY length(path) ASC, path ASC', (f'%{clean_q}%',))
+            row = c.fetchone()
         conn.close()
         if row:
             return row[0]

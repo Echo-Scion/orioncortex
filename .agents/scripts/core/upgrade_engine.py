@@ -204,6 +204,7 @@ class SacredFileShield:
         ".genome.json",
         ".dna.json",
         ".nanobrain_status",
+        "DECISIONS.md",
         "LEARNINGS.md",
         "OBSERVATIONS.md",
         "OBSERVATIONS.archive.md",
@@ -285,12 +286,22 @@ class SurgicalBiosSplicer:
         upstream_mandates = cls.extract_mandate_block(upstream_text)
         user_mandates = cls.extract_user_section(current_local_text)
 
-        # Standard header comment if present before delimiter
-        header_prefix = "# Workspace Rules & Mandates: {{PROJECT_NAME}}\n\n"
+        # Preserve local project title and framework placeholders if already hydrated in local file
+        local_title_m = re.match(r"^#\s+Workspace Rules & Mandates:\s*(.+)$", current_local_text.strip(), re.MULTILINE)
+        local_proj = local_title_m.group(1).strip() if local_title_m else "{{PROJECT_NAME}}"
+        local_fw_m = re.search(r"\.agents/canons/ecosystems/([a-zA-Z0-9_-]+)/\1-", current_local_text)
+        local_fw = local_fw_m.group(1) if local_fw_m else None
+
+        header_prefix = f"# Workspace Rules & Mandates: {local_proj}\n\n"
         if not upstream_mandates.startswith("#"):
             upstream_block = header_prefix + upstream_mandates
         else:
             upstream_block = upstream_mandates
+
+        if local_proj and local_proj not in ("{{PROJECT_NAME}}", "{project_name}"):
+            upstream_block = upstream_block.replace("{{PROJECT_NAME}}", local_proj).replace("{project_name}", local_proj)
+        if local_fw and local_fw not in ("{{FRAMEWORK}}", "{framework}"):
+            upstream_block = upstream_block.replace("{{FRAMEWORK}}", local_fw).replace("{framework}", local_fw)
 
         return f"{upstream_block}\n\n{user_mandates}".rstrip() + "\n"
 
@@ -526,6 +537,12 @@ class TransactionalUpgrader:
                     shutil.copy2(staged_path, dest_path)
                     applied_files.append(rel)
 
+                # 5b. Prune deprecated standalone .agents/workflows/*.md on spoke upgrades
+                try:
+                    self._prune_legacy_workflows(str(self.agents_dir))
+                except Exception:
+                    pass
+
                 # 6. Mechanical Verification Gate
                 if run_verify:
                     orion_script = self.agents_dir / "scripts" / "orion.py"
@@ -581,3 +598,24 @@ class TransactionalUpgrader:
             if temp_ctx:
                 temp_ctx.cleanup()
             self._release_lock()
+
+    def _prune_legacy_workflows(self, target_agents_dir: str) -> None:
+        """Prunes deprecated standalone .agents/workflows/*.md files from spoke projects."""
+        workflows_dir = os.path.join(target_agents_dir, "workflows")
+        if not os.path.isdir(workflows_dir):
+            return
+        pruned = 0
+        for item in os.listdir(workflows_dir):
+            fpath = os.path.join(workflows_dir, item)
+            if os.path.isfile(fpath) and item.endswith(".md"):
+                try:
+                    os.remove(fpath)
+                    pruned += 1
+                except Exception:
+                    pass
+        if pruned > 0:
+            try:
+                if not os.listdir(workflows_dir):
+                    os.rmdir(workflows_dir)
+            except Exception:
+                pass

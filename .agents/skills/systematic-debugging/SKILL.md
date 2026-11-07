@@ -1,7 +1,7 @@
 ---
 name: systematic-debugging
 description: >-
-  Executes a 4-phase scientific debugging protocol with single hypothesis trees, survivor verification, and circuit breaker. Use when investigating runtime bugs, failing tests, unexpected behaviors, or system crashes before modifying implementation code.
+  Use when investigating runtime bugs, failing tests, unexpected behaviors, or system crashes before modifying implementation code.
 ---
 
 # 🌲 Systematic Debugging Protocol (Scientific Root-Cause Discipline)

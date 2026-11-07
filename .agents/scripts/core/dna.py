@@ -170,13 +170,18 @@ CANONICAL_DEPENDENCY_LAWS: Dict[str, Any] = {
         },
         {
             "from_tier": "3_services",
-            "to_tier": ["4_state", "5_presentation"],
-            "reason": "Services/Repositories must never import UI widgets or state controllers."
+            "to_tier": ["4_state", "5_presentation", "8_native_and_cli"],
+            "reason": "Services/Repositories must never import UI widgets, state controllers, or CLI entrypoints."
+        },
+        {
+            "from_tier": "4_state",
+            "to_tier": ["5_presentation", "8_native_and_cli"],
+            "reason": "State controllers/notifiers must never import Presentation UI screens/widgets or CLI entrypoints."
         },
         {
             "from_tier": "5_presentation",
-            "to_tier": ["3_services"],
-            "reason": "Presentation screens/widgets must never bypass State controllers to talk directly to DB/Network."
+            "to_tier": ["3_services", "8_native_and_cli"],
+            "reason": "Presentation screens/widgets must never bypass State controllers to talk directly to DB/Network/CLI."
         }
     ]
 }
@@ -423,7 +428,7 @@ def classify_file_to_tier(
         any(seg in CANONICAL_5_TIERS["9_verification"]["folder_tokens"] for seg in parts[:-1])
         or base_lower.startswith(("test_", "spec_", "verify_", "audit_", "consequence_", "assertion_"))
         or base_lower.endswith(("_test.dart", "_test.py", ".test.ts", ".spec.ts", ".test.tsx", ".spec.tsx", "_test.go", ".test.js"))
-        or any(s.endswith("test") for s in syms_lower)
+        or (syms_lower and all(s.startswith("test_") or s.endswith(("_test", "testcase", "testsuite")) for s in syms_lower))
     ):
         t9 = CANONICAL_5_TIERS["9_verification"]
         return "9_verification", t9["gravity"], t9["slug"], t9["title"]
@@ -576,11 +581,15 @@ def discover_file_subsystem(rel_path: str) -> Optional[str]:
         return None
 
     if low_parts[0] == ".agents":
+        stem = os.path.splitext(parts[-1].lower())[0]
         if len(low_parts) >= 3 and low_parts[1] in ("scripts", "skills", "canons"):
-            if low_parts[1] == "scripts" and len(low_parts) >= 4 and low_parts[2] == "core":
-                return f"scripts/core/{low_parts[3]}"
+            if low_parts[1] == "scripts" and low_parts[2] in ("core", "commands"):
+                if len(low_parts) >= 4:
+                    return f"scripts/{low_parts[2]}/{low_parts[3]}"
+                if stem and stem != "__init__":
+                    return f"scripts/{low_parts[2]}/{stem}"
             return f"{low_parts[1]}/{low_parts[2]}"
-        if len(low_parts) >= 2 and low_parts[1] in ("rules", "docs", "templates", "archive"):
+        if len(low_parts) >= 2 and low_parts[1] in ("rules", "docs", "templates", "archive", "evals", "hooks", "scripts", "skills", "canons"):
             return f"agents/{low_parts[1]}"
         return ".agents"
 
@@ -880,6 +889,7 @@ def check_layer_violations(
 def extract_local_imports(file_path: str, content: Optional[str] = None) -> List[Tuple[int, str]]:
     """
     Extracts import lines and imported spec strings from Dart, TypeScript/JavaScript, and Python files.
+    Supports multiline imports and AST parsing for Python.
     Returns: List of (line_number, raw_import_target).
     """
     if content is None:
@@ -890,6 +900,32 @@ def extract_local_imports(file_path: str, content: Optional[str] = None) -> List
             return []
 
     results: List[Tuple[int, str]] = []
+
+    # 1. Python AST parsing for full multiline support
+    if file_path.endswith(".py"):
+        try:
+            tree = ast.parse(content, filename=file_path)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for n in node.names:
+                        results.append((node.lineno, n.name))
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    results.append((node.lineno, node.module))
+            return results
+        except Exception:
+            pass
+
+    # 2. Multiline import regex for TS, JS, Dart, Rust
+    multiline_ts_re = re.compile(
+        r'(?:import|export)\s+(?:type\s+)?(?:\{[^}]*\}|[\w\s,*]+)\s+from\s*[\'"]([^\'"]+)[\'"]',
+        re.MULTILINE | re.DOTALL
+    )
+    for m in multiline_ts_re.finditer(content):
+        line_no = content[:m.start()].count('\n') + 1
+        raw_imp = m.group(1).strip()
+        if raw_imp:
+            results.append((line_no, raw_imp))
+
     import_re = re.compile(
         r'^\s*(?:'
         r'import\s+(?:type\s+)?(?:[^\'";]+?\s+from\s+)?[\'"]([^\'"]+)[\'"]|'
@@ -902,13 +938,15 @@ def extract_local_imports(file_path: str, content: Optional[str] = None) -> List
         r')'
     )
 
+    seen = {(r[0], r[1]) for r in results}
     for line_no, line in enumerate(content.splitlines(), 1):
         m = import_re.match(line)
         if not m:
             continue
         raw_imp = next((g for g in m.groups() if g), "")
-        if raw_imp:
+        if raw_imp and (line_no, raw_imp.strip()) not in seen:
             results.append((line_no, raw_imp.strip()))
+            seen.add((line_no, raw_imp.strip()))
 
     return results
 
@@ -3572,8 +3610,9 @@ def quantify_semver_impact(
         for f in non_test_files[:20]:
             fp = os.path.join(abs_root, f)
             if os.path.isfile(fp):
-                syms = extract_file_symbols(fp)
-                pub = [s for s in syms if not s.startswith("_")]
+                syms_res = extract_file_symbols(fp)
+                sym_iter = syms_res[0].keys() if (isinstance(syms_res, tuple) and len(syms_res) >= 1 and isinstance(syms_res[0], dict)) else (syms_res.keys() if isinstance(syms_res, dict) else syms_res)
+                pub = [s for s in sym_iter if isinstance(s, str) and not s.startswith("_")]
                 delta_syms += len(pub)
     except Exception:
         delta_syms = len(non_test_files) * 2

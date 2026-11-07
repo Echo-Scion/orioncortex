@@ -1,7 +1,7 @@
 ---
 name: palette
 description: >-
-  Use when adding micro-UX polish, ARIA accessibility attributes, keyboard focus rings, or 60-30-10 surface contrast to existing components.
+  Use when adding micro-UX polish, ARIA accessibility attributes, keyboard focus rings, or surface contrast to components.
 ---
 
 # 🎨 Palette: Micro-UX & Accessibility Agent

@@ -22,6 +22,8 @@ from core.capabilities import (
     resolve_ollama_base_url,
     resolve_local_ai_endpoint,
     parse_model_parameters_b,
+    resolve_api_slot_config,
+    enqueue_cloud_handoff,
 )
 from core.db import atomic_write_text, log_telemetry
 
@@ -145,7 +147,10 @@ def classify_task_role(prompt: str) -> str:
     sorted_roles = sorted(scores.items(), key=lambda x: -x[1])
     if sorted_roles[0][1] > 0:
         return sorted_roles[0][0]
-    return "fixer" if any(w in p_lower for w in ("change", "update", "create", "write")) else "oracle"
+    default_role = os.environ.get("ORION_DEFAULT_AUTO_ROLE", "oracle").strip().lower()
+    if default_role not in ROLE_HARNESS_MATRIX:
+        default_role = "oracle"
+    return "fixer" if any(w in p_lower for w in ("change", "update", "create", "write")) else default_role
 
 
 def _resolve_lens_model(lens_name: str, backend_kind: str, default_model: str, models_map: Dict[str, str]) -> str:
@@ -176,8 +181,10 @@ def get_worker_status() -> Dict[str, Any]:
     api_enabled = os.environ.get("ORION_API_WORKER_ENABLED", "true").lower() == "true"
 
     ollama_url = os.environ.get("ORION_OLLAMA_URL") or resolve_ollama_base_url() or "Offline"
-    api_url = os.environ.get("ORION_API_BASE_URL", "https://opencode.ai/zen/go/v1")
-    api_key_present = bool(os.environ.get("ORION_API_KEY"))
+    fast_slot = resolve_api_slot_config("FAST")
+    smart_slot = resolve_api_slot_config("SMART")
+    api_url = fast_slot.get("base_url") or os.environ.get("ORION_API_BASE_URL", "https://opencode.ai/zen/go/v1")
+    api_key_present = bool(fast_slot.get("ready") or smart_slot.get("ready") or os.environ.get("ORION_API_KEY"))
 
     models = {
         "local_fast": os.environ.get("ORION_OLLAMA_MODEL_FAST", "qwen2.5-coder:1.5b"),
@@ -285,9 +292,14 @@ Max Execution Turns: {r_meta['turn_limit']}
 Provide your response in clean, concise, technical Markdown with zero conversational fluff."""
 
     if provider_kind == "offline":
+        enqueue_cloud_handoff(
+            task_type=f"worker_role:{role}",
+            payload={"role": role, "prompt": prompt[:2000], "target_file": target_file},
+            reason="both_api_and_local_workers_offline",
+        )
         print(f"[{role.upper()}] [TIER-0 OFFLINE MODE] Both API and Local workers are offline.")
         print(f"Task queued into .orion/working/cloud_handoff_queue.json.")
-        return 0
+        return 2
 
     print(f"[{role.upper()}] Dispatching to {provider_kind.upper()} ({assigned_model})...")
     res = generate_completion(
@@ -440,6 +452,11 @@ def cmd_goldfish_audit(spec_path: str, rubric: str = "all") -> int:
     # Maintain predictable lens ordering
     results.sort(key=lambda x: selected_lenses.index(x["lens"]) if x["lens"] in selected_lenses else 99)
 
+    completed_count = sum(1 for r in results if r.get("status") == "completed")
+    if completed_count == 0:
+        print(f"[OFFLINE/SKIPPED] 0/{len(results)} lenses executed (all workers offline).", file=sys.stderr)
+        return 2
+
     report_lines = [
         f"# 5-Lens Goldfish Swarm Audit Report",
         f"- **Spec File**: `{os.path.basename(abs_spec)}`",
@@ -505,6 +522,10 @@ Respond ONLY in JSON matching format:
     )
 
     code = payload.get("replacement_code", "")
+    if not code or not code.strip():
+        print(f"[OFFLINE/SKIPPED] Lookahead pre-draft for task {task_id} generated empty code.", file=sys.stderr)
+        return 2
+
     if abs_file.endswith(".py") and code:
         try:
             ast.parse(code)

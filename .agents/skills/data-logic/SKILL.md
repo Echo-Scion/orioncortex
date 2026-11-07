@@ -1,7 +1,7 @@
 ---
 name: data-logic
 description: >-
-  Designs immutable data models, DTOs, and type-safe transformation pipelines with unidirectional data flow. Use when drafting data structures, state schemas, DTOs, or state management logic.
+  Use when designing immutable data models, DTOs, type-safe transformation pipelines, or state management logic.
 ---
 
 # Data & State Architect

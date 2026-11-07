@@ -32,6 +32,9 @@
 **/.agents/.agents/**
 .agents/LEARNINGS.md
 .agents/EVOLUTION_LOG.jsonl
+.agents/OBSERVATIONS.md
+.agents/OBSERVATIONS.archive.md
+.agents/failures.log
 .agents/.foundation_path
 .agents/.project_manifest.json
 .agents/.deployed_ais

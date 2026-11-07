@@ -464,6 +464,7 @@ class ArchivalMemoryManager:
             pillar TEXT,
             updated TEXT,
             access_count INTEGER DEFAULT 0,
+            last_accessed TEXT,
             importance REAL DEFAULT 1.0,
             generation_id TEXT,
             superseded_by TEXT
@@ -473,6 +474,8 @@ class ArchivalMemoryManager:
             cur = conn.cursor()
             cur.execute("PRAGMA table_info(pages)")
             cols = {row[1] for row in cur.fetchall()}
+            if "last_accessed" not in cols:
+                conn.execute("ALTER TABLE pages ADD COLUMN last_accessed TEXT;")
             if "generation_id" not in cols:
                 conn.execute("ALTER TABLE pages ADD COLUMN generation_id TEXT;")
             if "superseded_by" not in cols:
@@ -483,8 +486,9 @@ class ArchivalMemoryManager:
         try:
             conn.execute("""
             CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
-                path UNINDEXED,
-                content
+                path,
+                content,
+                tokenize='porter'
             );
             """)
         except Exception:

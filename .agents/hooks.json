@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "pythonw hooks/rtk-pre-tool.py antigravity"
+            "command": "python -X utf8 hooks/rtk-pre-tool.py antigravity"
           }
         ]
       }
@@ -18,13 +18,13 @@
     "SessionStart": [
       {
         "type": "command",
-        "command": "pythonw hooks/pre-agent-wake.py --hook"
+        "command": "python -X utf8 hooks/pre-agent-wake.py --hook"
       }
     ],
     "PreInvocation": [
       {
         "type": "command",
-        "command": "pythonw hooks/pre-agent-wake.py --hook"
+        "command": "python -X utf8 hooks/pre-agent-wake.py --hook"
       }
     ]
   }

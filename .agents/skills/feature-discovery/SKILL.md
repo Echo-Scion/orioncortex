@@ -2,7 +2,6 @@
 name: feature-discovery
 description: >-
   Use before creating features, building components, or planning changes when requirements leave open non-trivial questions, unstated assumptions, or architectural forks.
-core_max_lines: 75
 ---
 
 # 💡 5-Lens Feature Discovery & Zero-Trust Elicitation (`/feature-discovery`)

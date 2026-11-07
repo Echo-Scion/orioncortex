@@ -152,6 +152,8 @@ def _binary_version(path: str) -> Optional[str]:
 _RESOLVED_OLLAMA_BASE_URL: Optional[str] = None
 _OLLAMA_OFFLINE: bool = False
 _RESOLVED_LOCAL_AI: Optional[Dict[str, Any]] = None
+_LOCAL_AI_PROBED_AT: float = 0.0
+_LOCAL_AI_NEGATIVE_TTL: float = 60.0
 
 
 def _probe_url(url: str, timeout: float = 1.0) -> bool:
@@ -162,8 +164,7 @@ def _probe_url(url: str, timeout: float = 1.0) -> bool:
             return resp.status == 200
     except urllib.error.HTTPError as e:
         return e.code == 200
-    except Exception as _e:
-        _log_telemetry(_e, f"capabilities.py:_probe_url:{url}")
+    except Exception:
         return False
 
 
@@ -178,8 +179,8 @@ def _probe_openai_url(url: str, timeout: float = 1.0) -> bool:
     except urllib.error.HTTPError as e:
         if e.code == 200:
             return True
-    except Exception as _e:
-        _log_telemetry(_e, f"capabilities.py:_probe_openai_url:{url}")
+    except Exception:
+        pass
 
     # 2. Probe /health (llama-server native healthcheck endpoint)
     try:
@@ -205,8 +206,9 @@ def resolve_local_ai_endpoint(force_refresh: bool = False) -> Optional[Dict[str,
     4. vLLM / LocalAI (:8000) via OpenAI /v1 protocol
     5. Custom URL via LOCAL_LLM_URL, OPENAI_BASE_URL, or ORION_LLM_URL
     """
-    global _RESOLVED_LOCAL_AI
-    if _RESOLVED_LOCAL_AI is not None and not force_refresh:
+    global _RESOLVED_LOCAL_AI, _LOCAL_AI_PROBED_AT, _OLLAMA_OFFLINE
+    now = time.time()
+    if not force_refresh and _LOCAL_AI_PROBED_AT > 0 and (now - _LOCAL_AI_PROBED_AT) < _LOCAL_AI_NEGATIVE_TTL:
         return _RESOLVED_LOCAL_AI
 
     # 1. Check custom environment overrides
@@ -285,6 +287,8 @@ def resolve_local_ai_endpoint(force_refresh: bool = False) -> Optional[Dict[str,
             return _RESOLVED_LOCAL_AI
 
     _RESOLVED_LOCAL_AI = None
+    _LOCAL_AI_PROBED_AT = time.time()
+    _OLLAMA_OFFLINE = True
     return None
 
 
@@ -903,13 +907,13 @@ def get_embedding(
     if not text.strip():
         return None
 
-    # Load Dual-Worker toggles
-    api_worker_enabled = os.environ.get("ORION_API_WORKER_ENABLED", "true").lower() == "true"
-    api_base = os.environ.get("ORION_API_BASE_URL", DEFAULT_API_BASE_URL).rstrip("/")
-    api_key = os.environ.get("ORION_API_KEY", "")
+    # Load Dual-Worker toggles via unified multi-provider slot resolver
+    embed_slot = resolve_api_slot_config("EMBED")
+    api_base = embed_slot["base_url"]
+    api_key = embed_slot["api_key"]
 
     # Check if this model is an API model
-    is_api_model = api_worker_enabled and api_base and api_key and (model == os.environ.get("ORION_API_EMBED_MODEL", ""))
+    is_api_model = embed_slot["ready"] and bool(embed_slot["model"]) and (model == embed_slot["model"])
 
     if is_api_model:
         url = f"{api_base}/embeddings"
@@ -1354,13 +1358,10 @@ def resolve_elastic_execution_plan(
     cloud_tier = cloud_tier_2d if use_2d else base_cloud
     gamma = 0.65 if scaffold_stage == "bento_card" else (0.35 if scaffold_stage == "ast_mapped" else 0.0)
 
-    # Check API Second Worker availability (OpenCode Go / Remote OpenAI-compatible API)
-    api_worker_online = (
-        os.environ.get("ORION_API_WORKER_ENABLED", "true").lower() == "true"
-        and bool(os.environ.get("ORION_API_BASE_URL", "https://opencode.ai/zen/go/v1").strip())
-        and bool(os.environ.get("ORION_API_KEY", "").strip())
-    )
-    api_fast_model = os.environ.get("ORION_API_MODEL_FAST", "qwen3-coder-flash")
+    # Check API Second Worker availability (Multi-Provider API / OpenCode Go / 9Router)
+    fast_slot = resolve_api_slot_config("FAST")
+    api_worker_online = bool(fast_slot["ready"])
+    api_fast_model = fast_slot["model"] or os.environ.get("ORION_API_MODEL_FAST", "qwen3-coder-flash")
     second_worker_model = api_fast_model if api_worker_online else eligible_model
     second_worker_online = bool(api_worker_online or (eligible_model and local_trials > 0))
 
@@ -1428,12 +1429,10 @@ def execute_neuro_symbolic(
     provider_prefix = "local_slm"
 
     if not (base_url and model):
-        api_enabled = os.environ.get("ORION_API_WORKER_ENABLED", "true").lower() == "true"
-        api_base = os.environ.get("ORION_API_BASE_URL", DEFAULT_API_BASE_URL).strip()
-        api_key = os.environ.get("ORION_API_KEY", "").strip()
-        if api_enabled and api_base and api_key and os.environ.get("ORION_WORKER_MODE", "local_first") != "local_only":
-            base_url = api_base
-            model = os.environ.get("ORION_API_MODEL_FAST", "qwen3-coder-flash")
+        fast_slot = resolve_api_slot_config("FAST")
+        if fast_slot["ready"] and os.environ.get("ORION_WORKER_MODE", "local_first") != "local_only":
+            base_url = fast_slot["base_url"]
+            model = fast_slot["model"] or os.environ.get("ORION_API_MODEL_FAST", "qwen3-coder-flash")
             provider_prefix = "api_worker"
 
     if base_url and model:

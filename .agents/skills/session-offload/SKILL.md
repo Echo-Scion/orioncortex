@@ -1,7 +1,7 @@
 ---
 name: session-offload
 description: >-
-  Mandatory checklist for ending a session smoothly, evicting stale scratchpads, running gated commits, resolving git branches/worktrees, and persisting handoff state. Use when finishing a session, handing off context to a future session, or when the user invokes /session-offload.
+  Use when finishing a session, handing off context to a future session, or when evicting stale scratchpads.
 ---
 
 # Session Offload (`/session-offload`)

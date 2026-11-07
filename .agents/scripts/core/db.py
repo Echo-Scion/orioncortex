@@ -94,7 +94,8 @@ def log_telemetry(
         if severity in ("INVARIANT_BREACH", "ERROR"):
             try:
                 is_testing = "unittest" in sys.modules or "pytest" in sys.modules or bool(os.environ.get("PYTEST_CURRENT_TEST"))
-                from commands.pulsar import ObservationLedger, BASE_DIR as _REFLEXION_BASE
+                from core.observation import ObservationLedger
+                _REFLEXION_BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
                 norm_orion = os.path.abspath(orion_dir)
                 ws_root = os.path.abspath(os.path.dirname(_REFLEXION_BASE))
                 is_in_workspace = norm_orion.startswith(ws_root)

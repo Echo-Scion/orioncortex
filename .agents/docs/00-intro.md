@@ -1,5 +1,5 @@
 # AI Brain: Main Encyclopedia of the `.agents` & `.orion` Ecosystem
-# (OrionCortex Infrastructure v0.1.0)
+# (OrionCortex Infrastructure v0.1.1)
 
 > **Complete Technical Encyclopedia.** Every architectural pillar, deterministic guardrail, local RAG component, script cluster, and operational skill is documented with technical precision and exact code examples.
 

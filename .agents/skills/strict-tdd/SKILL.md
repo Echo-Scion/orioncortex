@@ -1,7 +1,7 @@
 ---
 name: strict-tdd
 description: >-
-  Enforces strict Test-Driven Development (TDD) with mandatory RED-GREEN-REFACTOR gates and mechanical rollback. Use when writing new features, fixing bugs, or implementing code requiring verified test coverage before writing implementation.
+  Use when writing new features, fixing bugs, or implementing code requiring verified test coverage before writing implementation.
 ---
 
 # 🔴🟢 Strict TDD (`/strict-tdd`)

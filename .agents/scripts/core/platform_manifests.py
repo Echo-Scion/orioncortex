@@ -15,7 +15,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -25,7 +25,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -35,7 +35,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -45,7 +45,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -55,7 +55,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -65,7 +65,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -75,7 +75,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "contextFileName": "AGENTS.md"
         }
@@ -85,7 +85,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "contextFileName": "AGENTS.md"
         }
@@ -95,7 +95,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "instructions": ".github/copilot-instructions.md"
         }
@@ -105,7 +105,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -115,7 +115,7 @@ PLATFORM_SPECS = {
         "format": "raw",
         "content": (
             "name: orioncortex\n"
-            "version: 0.1.0\n"
+            "version: 0.1.1\n"
             "description: Turnkey Auto-Vibe Coding Brain Ecosystem\n"
             "skills_dir: .agents/skills\n"
         )
@@ -125,7 +125,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -135,7 +135,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -145,7 +145,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -169,7 +169,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -179,7 +179,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -189,7 +189,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -199,7 +199,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }

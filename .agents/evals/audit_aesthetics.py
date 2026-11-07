@@ -257,9 +257,14 @@ def scan_file_for_aesthetics(filepath: str, strict: bool = False) -> bool:
     if FAKE_CHROME_PATTERNS.search(content):
         warnings.append("Simulated browser/device chrome detected (traffic-light dots/fake URL bar). Allow real OS/browser to render natural chrome.")
 
-    # 10. Oversized card radii or arbitrary non-scale spacing
+    # 10. Oversized card radii & Concentric Geometry (outerRadius = innerRadius + padding)
     if re.search(r'(?:rounded-(?:3xl|\[(?:[3-9]\d|\d{3,})px\])|border-radius:\s*(?:[3-9]\d|\d{3,})px)', content, re.IGNORECASE):
-        warnings.append("Oversized container radius detected (>=30px). Enforce restrained 8-12px radius on cards to prevent AI pill-shape slop.")
+        warnings.append("Oversized container radius detected (>=30px). Enforce restrained 8-12px radius on cards and concentric geometry (outerRadius = innerRadius + padding).")
+    concentric_m = re.search(r'outerRadius\s*=\s*(\d+)\s*,\s*innerRadius\s*=\s*(\d+)\s*,\s*padding\s*=\s*(\d+)', content)
+    if concentric_m:
+        o_r, i_r, pad = int(concentric_m.group(1)), int(concentric_m.group(2)), int(concentric_m.group(3))
+        if o_r != i_r + pad:
+            warnings.append(f"Concentric Geometry Violation: outerRadius ({o_r}) != innerRadius ({i_r}) + padding ({pad}).")
 
     # 11. Visual Craft & Restraint Check (Animation, Spacing, Typography Tropes)
     for pat, msg in AESTHETIC_DEGENERACY_RULES:
@@ -353,7 +358,7 @@ def run_audit(target_dir: str = ".", strict: bool = False) -> int:
     md_files = []
 
     if os.path.isfile(target_dir):
-        if target_dir.endswith((".dart", ".tsx", ".jsx", ".css", ".html", ".vue")):
+        if target_dir.endswith((".dart", ".tsx", ".jsx", ".css", ".html", ".vue", ".kt")):
             ui_files.append(target_dir)
         elif target_dir.endswith(".md"):
             md_files.append(target_dir)
@@ -374,7 +379,7 @@ def run_audit(target_dir: str = ".", strict: bool = False) -> int:
             if rel_parts & ignored_dirs or (not allow_agents and ".agents" in rel_parts):
                 continue
             for file in files:
-                if file.endswith((".dart", ".tsx", ".jsx", ".css", ".html", ".vue")):
+                if file.endswith((".dart", ".tsx", ".jsx", ".css", ".html", ".vue", ".kt")):
                     ui_files.append(os.path.join(root, file))
                 elif file.endswith(".md"):
                     md_files.append(os.path.join(root, file))

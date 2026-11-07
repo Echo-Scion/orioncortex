@@ -1,7 +1,7 @@
 ---
 name: brain-graph
 description: >-
-  Manage Brain Graph, knowledge base indexing, FTS5 lexical queries, and Orion operations. Use when ingesting markdown files into the brain graph, querying knowledge nodes, extracting semantic triplets, or checking graph integrity.
+  Use when ingesting documents into the Brain Graph, querying knowledge nodes, extracting semantic triplets, or checking graph integrity.
 ---
 
 # Skill: Brain Graph Management & Orion Ops (`brain-graph`)

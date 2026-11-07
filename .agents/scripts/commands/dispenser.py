@@ -636,7 +636,14 @@ def sync_orion_infrastructure(
     ]
     for idx, t in enumerate(tasks):
         t_status = t.get("status", "OPEN")
-        status_tag = "[FIXED]" if t_status == "DONE" or idx < current_index else (f"[{t_status}]" if t_status == "PARKED" else ("[IMPLEMENTATION]" if idx == current_index else "[OPEN]"))
+        if t_status == "PARKED":
+            status_tag = "[PARKED]"
+        elif t_status == "DONE" or idx < current_index:
+            status_tag = "[FIXED]"
+        elif idx == current_index:
+            status_tag = "[IMPLEMENTATION]"
+        else:
+            status_tag = f"[{t_status}]" if t_status != "OPEN" else "[OPEN]"
         ledger_lines.append(
             f"- {t['task_id']} {status_tag}: `{t['target_file']}#L{t['start_line']}-L{t['end_line']}` — {t['title']} [{t.get('execution_lane', 'LANE-2')}]"
         )
@@ -864,6 +871,12 @@ def cmd_init(plan_path: str) -> int:
         print(f"[ORION BENTO ERROR] No structured Task cards found in {plan_path}.", file=sys.stderr)
         return 1
 
+    import hashlib
+    for t in tasks:
+        tf = ws / t.get("target_file", "").strip()
+        if tf.is_file():
+            t["initial_sha256"] = hashlib.sha256(tf.read_bytes()).hexdigest()
+
     # Record Plan Decisions upfront
     try:
         from commands.decisions import record_plan_decisions
@@ -927,6 +940,13 @@ def verify_patch_applied_on_disk(task: Dict[str, Any], workspace_root: Path) -> 
     if not full_path.is_file():
         return False, f"Target file does not exist on disk: {rel_path}"
 
+    init_sha = task.get("initial_sha256")
+    if init_sha and full_path.is_file():
+        import hashlib
+        curr_sha = hashlib.sha256(full_path.read_bytes()).hexdigest()
+        if curr_sha == init_sha:
+            return False, f"Target file '{rel_path}' has not been modified on disk (SHA-256 unchanged: {curr_sha[:12]})."
+
     search_code = task.get("search_code", "").strip()
     repl_code = task.get("replacement_code", "").strip()
 
@@ -963,6 +983,18 @@ def verify_patch_applied_on_disk(task: Dict[str, Any], workspace_root: Path) -> 
                     f"Target file '{rel_path}' still contains the exact unpatched SEARCH block!\n"
                     f"Either the patch was not applied or the AI inserted REPLACE without deleting SEARCH."
                 )
+
+        # 1b. Ensure expected replacement block lines are present on disk
+        if repl_lines:
+            first_repl = repl_lines[0]
+            found_repl = False
+            for idx in range(len(disk_lines) - len(repl_lines) + 1):
+                if disk_lines[idx] == first_repl:
+                    if all(disk_lines[idx + j] == repl_lines[j] for j in range(len(repl_lines))):
+                        found_repl = True
+                        break
+            if not found_repl and not any(r in disk_lines for r in repl_lines):
+                return False, f"Target file '{rel_path}' does not contain the expected REPLACE block lines."
 
         # 2. Check for consecutive patch-boundary line/block stutters (k=1..5 lines with identical indentation)
         repl_set = set(repl_lines)
@@ -1196,10 +1228,11 @@ def cmd_next(run_verify: bool = False, target_track: Optional[str] = None) -> in
 
 
 def cmd_park(reason: str = "Blocked on dependency", target_track: Optional[str] = None) -> int:
-    """Parks the active task (or track) and non-blockingly advances to the next unblocked track."""
+    """Parks the active task (or track) and non-blockingly advances to the next unblocked track without marking DONE."""
     ws = get_workspace_dir()
     orion_working = get_orion_dir() / "working"
     queue_path = orion_working / QUEUE_FILE
+    active_path = orion_working / ACTIVE_TASK_FILE
     if not queue_path.is_file():
         print("[ORION BENTO ERROR] No active queue to park.", file=sys.stderr)
         return 1
@@ -1217,7 +1250,23 @@ def cmd_park(reason: str = "Blocked on dependency", target_track: Optional[str] 
     task["park_reason"] = reason
     print(f"⏸️  [ORION BENTO PARKED] Task {task['task_id']} ({task['target_file']}) parked: {reason}")
 
-    return cmd_next(run_verify=False, target_track=target_track)
+    next_idx = idx + 1
+    if target_track:
+        for scan_i in range(next_idx, len(tasks)):
+            if tasks[scan_i].get("track_id") == target_track and tasks[scan_i].get("status") != "PARKED":
+                next_idx = scan_i
+                break
+
+    queue_data["current_index"] = next_idx
+    atomic_write_text(queue_path, json.dumps(queue_data, indent=2))
+    sync_orion_infrastructure(ws, queue_data.get("source_file", ""), tasks, next_idx)
+
+    if next_idx < len(tasks):
+        next_task = tasks[next_idx]
+        active_md = render_active_bento_markdown(next_task, next_idx, len(tasks), ws)
+        atomic_write_text(active_path, active_md)
+        _trigger_lookahead_predraft(tasks[next_idx + 1] if next_idx + 1 < len(tasks) else None, ws)
+    return 0
 
 
 def cmd_auto_solve(target_track: Optional[str] = None, all_lane1: bool = False) -> int:
@@ -1251,7 +1300,7 @@ def cmd_auto_solve(target_track: Optional[str] = None, all_lane1: bool = False) 
     full_path = ws / rel_path
     if not full_path.is_file():
         print(f"[AUTO-SOLVE] Target file missing: {rel_path}. Skipping.")
-        return 0
+        return 1
 
     # In-memory byte snapshot for atomic rollback
     byte_snapshot = full_path.read_bytes()
@@ -1280,7 +1329,7 @@ def cmd_auto_solve(target_track: Optional[str] = None, all_lane1: bool = False) 
             full_path.write_text(new_content, encoding="utf-8")
         else:
             print(f"[AUTO-SOLVE] SEARCH block not found on disk for task {task['task_id']}. Rollback.")
-            return 0
+            return 1
     except Exception as e:
         full_path.write_bytes(byte_snapshot)
         print(f"[AUTO-SOLVE ERROR] Failed to apply patch: {e}. Snapshot restored.")
@@ -1302,7 +1351,7 @@ def cmd_auto_solve(target_track: Optional[str] = None, all_lane1: bool = False) 
 
     full_path.write_bytes(byte_snapshot)
     print(f"[AUTO-SOLVE ROLLBACK] Verification command failed (Exit Code {retcode}). Byte snapshot restored cleanly.")
-    return 0
+    return retcode or 1
 
 
 def cmd_status() -> int:
@@ -1369,12 +1418,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     p_done.add_argument("--verify", action="store_true", help="Run current task verification gate before advancing")
 
     p_park = sub.add_parser("park", help="Park current task and advance to next unblocked track")
-    p_park.add_argument("--reason", default="Blocked on dependency", help="Reason for parking task")
+    p_park.add_argument("pos_reason", nargs="?", default=None, help="Reason for parking task (positional)")
+    p_park.add_argument("--reason", default=None, help="Reason for parking task (flag)")
 
     p_auto = sub.add_parser("auto-solve", help="Auto-solve Lane-1 Second-Worker cards with atomic byte rollback")
     p_auto.add_argument("--all", action="store_true", help="Attempt auto-solve across all available cards")
 
     sub.add_parser("status", help="Show current Bento & Orion FSM queue progress")
+
+    p_ft = sub.add_parser("fast-track", help="Execute direct single-task edit lane (<=2 files) without multi-stage Bento ceremony")
+    p_ft.add_argument("files", nargs="+", help="Target files (<= 2)")
+    p_ft.add_argument("--desc", default="", help="Brief task description")
 
     args = parser.parse_args(args_list)
     if args.subcommand in ("init", "slice"):
@@ -1382,11 +1436,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     elif args.subcommand in ("next", "done"):
         return cmd_next(run_verify=args.verify, target_track=getattr(args, "track", None))
     elif args.subcommand == "park":
-        return cmd_park(reason=args.reason)
+        reason = args.pos_reason or args.reason or "Blocked on dependency"
+        return cmd_park(reason=reason)
     elif args.subcommand == "auto-solve":
         return cmd_auto_solve(all_lane1=args.all)
     elif args.subcommand == "status":
         return cmd_status()
+    elif args.subcommand == "fast-track":
+        from commands.state_machine import cmd_fast_track
+        return cmd_fast_track(args.files, description=args.desc)
     else:
         parser.print_help()
         return 0

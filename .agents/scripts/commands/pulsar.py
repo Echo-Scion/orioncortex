@@ -1519,11 +1519,11 @@ def parse_transcript_observations(transcript_path=None):
                         if isinstance(tc, dict):
                             fn_name = tc.get("name") or tc.get("toolAction")
                             args = tc.get("args", {}) or tc.get("arguments", {})
-                            if fn_name in ["write_to_file", "replace_file_content", "multi_replace_file_content"]:
-                                target_f = args.get("TargetFile") or args.get("target_file")
+                            if fn_name in ["write_to_file", "replace_file_content", "multi_replace_file_content", "edit_file", "write_file", "Edit", "Write", "MultiEdit"]:
+                                target_f = args.get("TargetFile") or args.get("target_file") or args.get("file_path") or args.get("path")
                                 if target_f:
                                     observations["modified_files"].add(target_f)
-                            elif fn_name in ["run_command", "execute"]:
+                            elif fn_name in ["run_command", "execute", "execute_bash", "Bash", "run_terminal_cmd"]:
                                 cmd_str = args.get("CommandLine") or args.get("command")
                                 if cmd_str:
                                     observations["executed_commands"].add(cmd_str[:120])
@@ -2275,6 +2275,9 @@ def main():
         return
 
     if cmd == "linkify":
+        if any(a.lower() in ("-h", "--help", "help") for a in sys.argv[2:]):
+            print("Usage: orion.py linkify\nAuto-injects Obsidian [[wikilinks]] across context, rules, and skills.")
+            sys.exit(0)
         code = linkify_workspace()
         sys.exit(code)
 

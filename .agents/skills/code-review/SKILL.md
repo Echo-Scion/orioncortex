@@ -1,8 +1,7 @@
 ---
 name: code-review
 description: >-
-  Conducts code reviews, pull request audits, and offensive security checks using adversarial verification. Use when reviewing diffs, auditing pull requests, checking security boundaries, or evaluating code quality before merging.
-core_max_lines: 125
+  Use when reviewing code diffs, auditing pull requests, checking security boundaries, or running adversarial verification before merging.
 ---
 
 # 🕵️ Code Review & Offensive Audit (`/code-review`)

@@ -116,6 +116,9 @@ def clean_vault_mirrors(orion_dir: Optional[str] = None) -> int:
 
 def vault_main(argv=None) -> int:
     """CLI Entrypoint for vault commands."""
+    args_list = list(argv if argv is not None else sys.argv[1:])
+    if args_list and args_list[0].lower() in ("vault", "observatory"):
+        args_list.pop(0)
     parser = argparse.ArgumentParser(
         prog="orion.py vault",
         description="Obsidian Vault and Second Brain Manager for Orion",
@@ -130,7 +133,7 @@ def vault_main(argv=None) -> int:
 
     clean_p = subparsers.add_parser("clean", help="Clean stale vault export caches")
 
-    args = parser.parse_args(argv)
+    args = parser.parse_args(args_list)
     if not args.subcommand or args.subcommand == "export":
         out = getattr(args, "out", None)
         return export_vault(out)

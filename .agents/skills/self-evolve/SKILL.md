@@ -1,7 +1,7 @@
 ---
 name: self-evolve
 description: >-
-  Post-task reflection and deterministic learning loop to extract patterns and prevent recurring mistakes. Use when tasks fail repeatedly, after resolving complex bugs, or when extracting new rules into LEARNINGS.md.
+  Use when tasks fail repeatedly, after resolving complex bugs, or when extracting new operational rules into LEARNINGS.md.
 ---
 
 # 🧠 Self-Evolve (Mechanical Learning & Reflection Loop)

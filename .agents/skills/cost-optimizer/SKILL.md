@@ -1,7 +1,7 @@
 ---
 name: cost-optimizer
 description: >-
-  Use when analyzing token expenditure, evaluating context window bloat, checking large files, setting token budgets, enforcing lessword concise prose, or running orion compactor/humanizer.
+  Use when analyzing token expenditure, evaluating context window bloat, checking large files, setting token budgets, or enforcing concise lessword prose.
 ---
 
 # 💰 Cost Optimizer & Information Density Protocol (`/cost-optimizer`)

@@ -131,13 +131,13 @@ Evaluation matrices and benchmark configurations for assessing agentic reasoning
 
 ## Chapter 21: Archive & Root Metadata Files
 
-### 21.1. Archive (`archive/`)
-Preserves architectural history and legacy implementations:
-- `archive/workflows/`: 18 legacy procedural workflows preserved for historical reference following their consolidation into Skill Tier-3 References.
+### 21.1. Archive & Historical Reference
+Preserves architectural evolution history:
+- Legacy procedural workflows have been consolidated into first-class Skills and Tier-3 References.
 - `archive/orion_mcp.py`: Experimental legacy MCP server implementation.
 
 ### 21.2. Root Metadata Files
-- **`AGENTS_INDEX.md`**: Master index mapping all rules, skills, workflows, and canons.
+- **`AGENTS_INDEX.md`**: Master index mapping all rules, skills, Tier-3 references, and canons.
 - **`DEPLOY_ME.md`**: Plug-and-play instructions for deploying Foundation to new spoke projects.
 - **`OBSERVATIONS.md` & `OBSERVATIONS.archive.md`**: Active 5-status Habit Observation ledger and cold archive for actioned/superseded observations.
 - **`LEARNINGS.md`**: Collective experiential memory storing structured post-mortems.
