@@ -321,7 +321,7 @@ _FILE_STEM_PATTERNS: Dict[str, Tuple[str, ...]] = {
 def normalize_epigenetic_aliases(raw_aliases: Any) -> Dict[str, str]:
     """
     Normalizes epigenetic_aliases into canonical {folder_prefix: canonical_tier_key} format.
-    Supports both canonical Dict[str, str] and inverted Dict[str, List[str]] (e.g. from flutterin).
+    Supports both canonical Dict[str, str] and inverted Dict[str, List[str]].
     """
     if not isinstance(raw_aliases, dict):
         return {}
@@ -441,7 +441,7 @@ def classify_file_to_tier(
         or (len(parts) > 2 and parts[0] in ("apps", "packages", "services") and parts[2] in native_root_tokens)
     )
     is_root_barrel = norm_lower in ("src/index.ts", "src/index.js", "src/main.ts", "lib/main.dart", "lib/index.ts") or base_lower in ("main.dart", "main.py", "main.rs", "main.go", "app.py")
-    if (
+    if base_lower != "compact.py" and (
         is_native_root
         or is_root_barrel
         or any(seg in cli_bridge_tokens for seg in parts[:-1])
@@ -472,7 +472,7 @@ def classify_file_to_tier(
     # Tier 3 Kernel Modules & Shared Engine Utilities
     # Evaluated before Tier 4 and Tier 5 to prevent system backend scripts from being misclassified as app state/UI
     is_kernel_module = any(seg in ("core", "utils", "shared", "common") for seg in parts[:-1]) and any(".agents" in seg or "scripts" in seg for seg in parts[:-1])
-    is_kernel_script = is_kernel_module or base_lower.startswith(("db.", "orion_graph.", "memory.", "capabilities.", "packer.", "scanner."))
+    is_kernel_script = is_kernel_module or base_lower.startswith(("db.", "orion_graph.", "memory.", "capabilities.", "packer.", "scanner.", "compact."))
     if is_kernel_script:
         t3 = CANONICAL_5_TIERS["3_services"]
         return "3_services", t3["gravity"], t3["slug"], t3["title"]
@@ -782,10 +782,9 @@ def check_layer_violations(
         full_p = os.path.join(root_dir, rel_f)
         try:
             with open(full_p, "r", encoding="utf-8", errors="ignore") as fh:
-                content = fh.read(32768)
+                content = fh.read()
         except OSError:
             continue
-
         # 1. Chimera Detection: Presentation file mixing raw SQL/HTTP/DB drivers
         norm_rel_f = rel_f.replace("\\", "/").lower()
         base_rel_f = os.path.basename(norm_rel_f)
@@ -895,10 +894,9 @@ def extract_local_imports(file_path: str, content: Optional[str] = None) -> List
     if content is None:
         try:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read(65536)
+                content = f.read()
         except OSError:
             return []
-
     results: List[Tuple[int, str]] = []
 
     # 1. Python AST parsing for full multiline support
@@ -1563,7 +1561,7 @@ def sequence_project_dna(
     # DNA state determination
     if stored_dna.get("dna_state"):
         dna_state = stored_dna["dna_state"]
-    elif stored_dna.get("origin") == "flutterin":
+    elif stored_dna.get("origin") in ("reverse_engineering", "reverse_engineered"):
         dna_state = "BORN_FROM_REVERSE"
     elif has_explicit_dna:
         dna_state = "BORN"
@@ -2036,19 +2034,24 @@ def get_dna_trend(root_dir: str, limit: int = 10, db_path: Optional[str] = None)
             if curr_score < prev_score:
                 has_regression = True
                 regression_reason = f"Compliance score dropped from {prev_score}/100 to {curr_score}/100"
-                try:
-                    from commands.pulsar import ObservationLedger
-                    ledger = ObservationLedger()
-                    ledger.add_observation(
-                        title=f"DNA compliance score regression ({prev_score} -> {curr_score})",
-                        kind="improve",
-                        target="core/dna.py",
-                        rule_id="DNA_COMPLIANCE_REGRESSION",
-                        evidence=f"Latest snapshot score {curr_score} lower than previous {prev_score}"
-                    )
-                except Exception:
-                    pass
-
+                is_testing = "unittest" in sys.modules or "pytest" in sys.modules or bool(os.environ.get("PYTEST_CURRENT_TEST"))
+                if not is_testing:
+                    try:
+                        from core.observation import ObservationLedger
+                        target_agents = os.path.join(abs_root, ".agents")
+                        ledger = ObservationLedger(
+                            active_path=os.path.join(target_agents, "OBSERVATIONS.md"),
+                            archive_path=os.path.join(target_agents, "OBSERVATIONS.archive.md"),
+                        )
+                        ledger.add_observation(
+                            title=f"DNA compliance score regression ({prev_score} -> {curr_score})",
+                            kind="improve",
+                            target="core/dna.py",
+                            rule_id="DNA_COMPLIANCE_REGRESSION",
+                            evidence=f"Latest snapshot score {curr_score} lower than previous {prev_score}"
+                        )
+                    except Exception:
+                        pass
         return {
             "ok": True,
             "snapshots": snapshots,
@@ -3605,17 +3608,30 @@ def quantify_semver_impact(
 
     # 3. AST Symbol Surface Delta (0 - 18.0)
     delta_syms = 0
-    try:
-        from core.scanner import extract_file_symbols
-        for f in non_test_files[:20]:
-            fp = os.path.join(abs_root, f)
-            if os.path.isfile(fp):
-                syms_res = extract_file_symbols(fp)
-                sym_iter = syms_res[0].keys() if (isinstance(syms_res, tuple) and len(syms_res) >= 1 and isinstance(syms_res[0], dict)) else (syms_res.keys() if isinstance(syms_res, dict) else syms_res)
-                pub = [s for s in sym_iter if isinstance(s, str) and not s.startswith("_")]
-                delta_syms += len(pub)
-    except Exception:
-        delta_syms = len(non_test_files) * 2
+    if isinstance(ast_delta, dict):
+        delta_syms = (
+            len(ast_delta.get("added_symbols", []))
+            + len(ast_delta.get("removed_symbols", []))
+            + len(ast_delta.get("modified_symbols", []))
+            + int(ast_delta.get("added_or_modified_symbols", 0))
+        )
+    else:
+        try:
+            from core.scanner import extract_file_symbols
+            for f in non_test_files[:20]:
+                fp = os.path.join(abs_root, f)
+                if os.path.isfile(fp):
+                    syms_res = extract_file_symbols(fp)
+                    sym_iter = syms_res[0].keys() if (isinstance(syms_res, tuple) and len(syms_res) >= 1 and isinstance(syms_res[0], dict)) else (syms_res.keys() if isinstance(syms_res, dict) else syms_res)
+                    pub = [s for s in sym_iter if isinstance(s, str) and not s.startswith("_")]
+                    if f in added_set:
+                        delta_syms += len(pub)
+                    else:
+                        delta_syms += min(4, len(pub))
+                elif f in added_set:
+                    delta_syms += 2
+        except Exception:
+            delta_syms = len(non_test_files) * 2
     s_ast = min(18.0, round(min(delta_syms, 20) * 0.9, 2))
 
     # 4. Semantic Commit Momentum (0 - 80.0+)
@@ -3878,10 +3894,11 @@ def evaluate_dna_semver(
             pass
 
     session_history_path = os.path.join(abs_root, ".orion", "episodic", "session_history.md")
-    if os.path.isfile(session_history_path):
+    if not msgs and os.path.isfile(session_history_path):
         try:
             with open(session_history_path, "r", encoding="utf-8", errors="ignore") as f:
-                msgs.append(f.read())
+                lines_hist = f.readlines()
+                msgs.append("".join(lines_hist[-40:]))
         except OSError:
             pass
 

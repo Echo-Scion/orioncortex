@@ -359,25 +359,34 @@ class ReflexionEngine:
         # 1. Drain recurring mechanical catches from Seam 1 (.orion/working/mechanical_catches.json) into LEARNINGS.md
         try:
             from core.db import drain_mechanical_catches
-            catches = drain_mechanical_catches(clear=False)
+            catches = drain_mechanical_catches(clear=True)
+            existing_titles = {item.get("title", "").lower() for item in self.list_learnings()}
             ctx_counts: Dict[str, List[Dict[str, Any]]] = {}
+            _benign_contexts = ("get_available_models:ollama", "brain.py:82", "brain.py:91", "test_module:fetch_items")
             for c in catches:
-                ctx_key = f"{c.get('context', 'unknown')}::{c.get('exception_type', 'Error')}"
+                c_ctx = str(c.get("context", "unknown"))
+                c_err = str(c.get("error", ""))
+                if any(b in c_ctx for b in _benign_contexts) or "Connection refused" in c_err or "No module named 'torch'" in c_err:
+                    continue
+                ctx_key = f"{c_ctx}::{c.get('exception_type', 'Error')}"
                 ctx_counts.setdefault(ctx_key, []).append(c)
             for ctx_key, events in ctx_counts.items():
                 if len(events) >= 2:
                     sample = events[-1]
-                    self.record_learning(
-                        title=f"Recurring Mechanical Catch in {sample.get('context', 'unknown')}",
-                        root_cause=f"{sample.get('exception_type')}: {sample.get('error', '')[:200]}",
-                        fix_applied="Captured via @sovereign_catch telemetry sink",
-                        self_evolve_rule=f"Enforce boundary invariant guard on {sample.get('context')}",
-                        trigger=f"When invoking {sample.get('context')}",
-                        evidence=f"Observed {len(events)} mechanical catch events in mechanical_catches.json",
-                        intervention=f"Validate input/output contract for {sample.get('context')}",
-                        guard="Do not suppress genuine runtime exceptions",
-                        resting_tier="TIER-0",
-                    )
+                    cand_title = f"Recurring Mechanical Catch in {sample.get('context', 'unknown')}"
+                    if cand_title.lower() not in existing_titles:
+                        self.record_learning(
+                            title=cand_title,
+                            root_cause=f"{sample.get('exception_type')}: {sample.get('error', '')[:200]}",
+                            fix_applied="Captured via @sovereign_catch telemetry sink",
+                            self_evolve_rule=f"Enforce boundary invariant guard on {sample.get('context')}",
+                            trigger=f"When invoking {sample.get('context')}",
+                            evidence=f"Observed {len(events)} mechanical catch events in mechanical_catches.json",
+                            intervention=f"Validate input/output contract for {sample.get('context')}",
+                            guard="Do not suppress genuine runtime exceptions",
+                            resting_tier="TIER-0",
+                        )
+                        existing_titles.add(cand_title.lower())
         except Exception as _ce:
             _log_telemetry(_ce, "reflexion.py:drain_catches_to_learnings")
 
@@ -421,344 +430,141 @@ class ReflexionEngine:
         seen_norms = set()
         for item in learnings:
             title = item.get("title", "")
+            if "[Graduated to Skill:" in title or "[Patched to Skill:" in title:
+                continue
             norm = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
             if norm and norm not in seen_norms:
                 seen_norms.add(norm)
                 res = self.graduate_learning(title, intents_dir=intents_dir)
                 if res.get("ok"):
+                    res["correction_hierarchy"] = classify_correction_hierarchy(
+                        title, item.get("root_cause", ""), item.get("rule", "")
+                    )
                     graduated.append(res)
         return graduated
 
-
-class ObservationLedger:
+def classify_correction_hierarchy(context: str, root_cause: str, self_evolve_rule: str = "") -> Dict[str, str]:
     """
-    Observation Ledger & Signal Capture System (Phase 1).
-    Manages raw observations in .agents/OBSERVATIONS.md and .agents/OBSERVATIONS.archive.md.
+    Ranks recurring mistakes according to the 4-Level Mechanical Enforcement Hierarchy (/correct):
+      1. TIER_1_ARCHITECTURE_OR_TYPE: Make mistake impossible via schema, type signature, or core API contract.
+      2. TIER_2_DETERMINISTIC_LINT_OR_AST: Block via verify_agents.py, dna.py, or security.py AST/regex gate.
+      3. TIER_3_REGRESSION_TEST: Catch via deterministic unit test in .agents/scripts/tests/.
+      4. TIER_4_SKILL_PROSE_LAST_RESORT: Document in SKILL.md only when mechanical enforcement is impossible.
     """
-    def __init__(self, active_path: str = None, archive_path: str = None, ledger_path: str = None):
-        self.active_path = active_path or ledger_path or OBSERVATIONS_FILE
-        self.archive_path = archive_path or OBSERVATIONS_ARCHIVE_FILE
-        self._ensure_files_exist()
-
-    def _ensure_files_exist(self):
-        if not os.path.exists(self.active_path):
-            header = (
-                "# Observation Ledger (Active & Parked Signals)\n\n"
-                "> Raw signals: corrections, tool failures, mechanical catches, verify fails, rule violations.\n\n"
-            )
-            atomic_write_text(self.active_path, header)
-        if not os.path.exists(self.archive_path):
-            header = (
-                "# Observation Ledger Archive (Resolved Signals)\n\n"
-                "> Resolved, declined, or superseded observations.\n\n"
-            )
-            atomic_write_text(self.archive_path, header)
-
-    def _parse_file(self, filepath: str) -> List[Dict[str, Any]]:
-        if not os.path.exists(filepath):
-            return []
-        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
-
-        entries = []
-        blocks = re.split(r"(?m)^(?=##\s+Observation\s+)", content)
-        for block in blocks:
-            if not block.strip().startswith("## Observation "):
-                continue
-            lines = block.strip().splitlines()
-            title_line = lines[0]
-            m_title = re.match(r"##\s+Observation\s+#?(\d+):\s*(.+)", title_line)
-            if not m_title:
-                continue
-            obs_id = int(m_title.group(1))
-            title = m_title.group(2).strip()
-
-            entry = {
-                "id": obs_id,
-                "anchor_id": f"O{obs_id}",
-                "title": title,
-                "fingerprint": "",
-                "status": "open",
-                "kind": "improve",
-                "target": "",
-                "rule_id": "",
-                "siblings_checked": "true",
-                "scope": "project",
-                "parked_until": "",
-                "evidence": "",
-                "created": "",
-                "resolved": "",
-                "resolution": "",
-                "superseded_by": "",
-                "count": 1,
-                "seen_in": "",
-                "applies_to": ""
-            }
-
-            for line in lines[1:]:
-                m_kv = re.match(r"^\s*-\s*\*\*([a-zA-Z0-9_]+)\*\*\s*:\s*(.*)$", line)
-                if m_kv:
-                    k = m_kv.group(1).lower()
-                    v = m_kv.group(2).strip()
-                    if k == "id":
-                        try:
-                            entry["id"] = int(v)
-                        except ValueError:
-                            pass
-                    elif k == "count":
-                        try:
-                            entry["count"] = int(v)
-                        except ValueError:
-                            entry["count"] = 1
-                    elif k in entry:
-                        entry[k] = v
-
-            entries.append(entry)
-        return entries
-
-    def get_all_observations(self) -> List[Dict[str, Any]]:
-        return self._parse_file(self.active_path)
-
-    def get_archive_observations(self) -> List[Dict[str, Any]]:
-        return self._parse_file(self.archive_path)
-
-    def get_next_id(self) -> int:
-        active = self.get_all_observations()
-        arch = self.get_archive_observations()
-        max_id = 0
-        for item in active + arch:
-            if item["id"] > max_id:
-                max_id = item["id"]
-        return max_id + 1
-
-    def compute_fingerprint(self, kind: str, target_or_rule: str, title: str) -> str:
-        raw = f"{kind.strip().lower()}:{target_or_rule.strip().lower()}:{title.strip().lower()}"
-        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
-
-    def add_observation(
-        self,
-        title: str,
-        kind: str = "improve",
-        target: str = "",
-        rule_id: str = "",
-        scope: str = "project",
-        evidence: str = "",
-        status: str = "open",
-        parked_until: str = "",
-        siblings_checked: str = "true",
-        count: int = 1,
-        seen_in: str = "",
-        applies_to: str = ""
-    ) -> Dict[str, Any]:
-        if status == "parked" and not parked_until.strip():
-            raise ValueError("Observations with status 'parked' require a valid 'parked_until' date (YYYY-MM-DD)")
-
-        is_subagent = (
-            os.environ.get("ANTIGRAVITY_SUBAGENT") == "1" or
-            os.environ.get("SUBAGENT") == "1" or
-            os.environ.get("WORKER_DELEGATE") == "1"
-        )
-        if is_subagent:
-            return {
-                "id": -1,
-                "fingerprint": "subagent_refused",
-                "title": title,
-                "status": "refused_subagent",
-                "kind": kind,
-                "target": target,
-                "rule_id": rule_id,
-                "siblings_checked": siblings_checked,
-                "scope": scope,
-                "parked_until": parked_until,
-                "evidence": evidence,
-                "created": "",
-                "resolved": "",
-                "resolution": "subagents write nothing",
-                "count": count,
-                "seen_in": seen_in,
-                "applies_to": applies_to
-            }
-
-        ws_dir = os.path.abspath(WORKSPACE_DIR)
-        if target and os.path.isabs(target):
-            norm_target = os.path.abspath(target)
-            if norm_target.startswith(ws_dir):
-                target = os.path.relpath(norm_target, ws_dir).replace("\\", "/")
-
-        if evidence:
-            if ws_dir in evidence:
-                evidence = evidence.replace(ws_dir, ".").replace(ws_dir.replace("\\", "/"), ".")
-            if "file://" in evidence:
-                evidence = re.sub(r"file://[^\s)]+", lambda m: m.group(0).replace("file://", ""), evidence)
-
-        target_or_rule = rule_id if rule_id else target
-        fp = self.compute_fingerprint(kind, target_or_rule, title)
-
-        # Negative Memory Barrier: Check if this fingerprint was previously declined in archive
-        arch = self.get_archive_observations()
-        for arch_item in arch:
-            if arch_item.get("fingerprint") == fp and arch_item.get("status") == "declined":
-                # Return blocked entry without resurrecting in active list
-                arch_item_copy = dict(arch_item)
-                arch_item_copy["status"] = "blocked_declined_fingerprint"
-                arch_item_copy["resolution"] = f"Blocked re-observation: previously declined in archive as #{arch_item.get('id')}"
-                return arch_item_copy
-
-        active = self.get_all_observations()
-        for item in active:
-            if item.get("fingerprint") == fp and item.get("status") in ("open", "parked"):
-                if evidence:
-                    existing_ev_parts = [p.strip() for p in item.get("evidence", "").split(" | ") if p.strip()]
-                    if evidence.strip() not in existing_ev_parts:
-                        existing_ev_parts.append(evidence.strip())
-                    item["evidence"] = " | ".join(existing_ev_parts)
-                item["count"] = int(item.get("count", 1)) + 1
-                if seen_in and seen_in not in item.get("seen_in", ""):
-                    item["seen_in"] = (item.get("seen_in", "") + ", " + seen_in).strip(", ")
-                if applies_to and applies_to not in item.get("applies_to", ""):
-                    item["applies_to"] = (item.get("applies_to", "") + ", " + applies_to).strip(", ")
-                self._write_active_list(active)
-                return item
-
-        obs_id = self.get_next_id()
-        now_str = datetime.now().isoformat()
-
-        entry = {
-            "id": obs_id,
-            "fingerprint": fp,
-            "title": title.strip(),
-            "status": status.strip(),
-            "kind": kind.strip(),
-            "target": target.strip(),
-            "rule_id": rule_id.strip(),
-            "siblings_checked": siblings_checked.strip() or "true",
-            "scope": scope.strip() or "project",
-            "parked_until": parked_until.strip(),
-            "evidence": evidence.strip(),
-            "created": now_str,
-            "resolved": "",
-            "resolution": "",
-            "count": count,
-            "seen_in": seen_in.strip(),
-            "applies_to": applies_to.strip()
-        }
-
-        if status.strip() in ("actioned", "resolved", "declined"):
-            entry["resolved"] = now_str
-            entry["resolution"] = "Added directly with resolved status"
-            self._append_to_archive(entry)
-            return entry
-
-        active.append(entry)
-        self._write_active_list(active)
-        return entry
-
-    def _format_entry(self, entry: Dict[str, Any]) -> str:
-        lines = [
-            f"## Observation {entry['id']}: {entry['title']}",
-            f"- **id**: {entry['id']}",
-            f"- **fingerprint**: {entry['fingerprint']}",
-            f"- **status**: {entry['status']}",
-            f"- **kind**: {entry['kind']}",
-            f"- **target**: {entry['target']}",
-            f"- **rule_id**: {entry['rule_id']}",
-            f"- **siblings_checked**: {entry['siblings_checked']}",
-            f"- **scope**: {entry['scope']}",
-        ]
-        if entry.get("count") and int(entry.get("count", 1)) > 1:
-            lines.append(f"- **count**: {entry['count']}")
-        if entry.get("seen_in"):
-            lines.append(f"- **seen_in**: {entry['seen_in']}")
-        if entry.get("applies_to"):
-            lines.append(f"- **applies_to**: {entry['applies_to']}")
-        if entry.get("parked_until"):
-            lines.append(f"- **parked_until**: {entry['parked_until']}")
-        if entry.get("evidence"):
-            lines.append(f"- **evidence**: {entry['evidence']}")
-        if entry.get("created"):
-            lines.append(f"- **created**: {entry['created']}")
-        if entry.get("resolved"):
-            lines.append(f"- **resolved**: {entry['resolved']}")
-        if entry.get("resolution"):
-            lines.append(f"- **resolution**: {entry['resolution']}")
-        if entry.get("superseded_by"):
-            lines.append(f"- **superseded_by**: {entry['superseded_by']}")
-        lines.append("")
-        return "\n".join(lines)
-
-    def _write_active_list(self, entries: List[Dict[str, Any]]):
-        header = (
-            "# Observation Ledger (Active & Parked Signals)\n\n"
-            "> Raw signals: corrections, tool failures, mechanical catches, verify fails, rule violations.\n\n"
-        )
-        content = header + "\n".join(self._format_entry(e) for e in entries)
-        atomic_write_text(self.active_path, content)
-
-    def _write_archive_list(self, entries: List[Dict[str, Any]]):
-        header = (
-            "# Observation Ledger Archive (Resolved Signals)\n\n"
-            "> Resolved, declined, or superseded observations.\n\n"
-        )
-        content = header + "\n".join(self._format_entry(e) for e in entries)
-        atomic_write_text(self.archive_path, content)
-
-    def _append_to_archive(self, entry: Dict[str, Any]) -> None:
-        arch = self.get_archive_observations()
-        arch.append(entry)
-        self._write_archive_list(arch)
-
-    def list_observations(self, status: str = None, limit: int = None) -> List[Dict[str, Any]]:
-        active = self.get_all_observations()
-        if status:
-            active = [e for e in active if e.get("status") == status]
-        if limit and limit > 0:
-            active = active[:limit]
-        return active
-
-    def check_rule_violations(self, rule_id: str) -> Dict[str, Any]:
-        if not rule_id:
-            return {"rule_id": "", "count": 0, "forced_tier0": False, "observations": []}
-        active = self.get_all_observations()
-        arch = self.get_archive_observations()
-        matching_active = [e for e in active if e.get("rule_id") == rule_id and e.get("status") in ("open", "parked")]
-        matching_rolled = [e for e in arch if e.get("rule_id") == rule_id and e.get("kind") == "violation" and e.get("status") == "superseded"]
-        all_matching = matching_active + matching_rolled
-        count = sum(int(e.get("count", 1)) for e in all_matching)
-        forced_tier0 = count >= 2
+    combined = f"{context} {root_cause} {self_evolve_rule}".lower()
+    if any(k in combined for k in ("schema", "typeerror", "keyerror", "attributeerror", "signature", "contract", "circular", "layer")):
         return {
-            "rule_id": rule_id,
-            "count": count,
-            "forced_tier0": forced_tier0,
-            "observations": all_matching
+            "rank": 1,
+            "tier": "TIER_1_ARCHITECTURE_OR_TYPE",
+            "directive": "Make error impossible via schema, type contract, or 5-Tier DNA boundary in core/.",
         }
+    if any(k in combined for k in ("syntax", "import", "security", "secret", "encoding", "utf-8", "path", "lint", "ast", "verify")):
+        return {
+            "rank": 2,
+            "tier": "TIER_2_DETERMINISTIC_LINT_OR_AST",
+            "directive": "Enforce via deterministic AST or regex gate in verify_agents.py or core/security.py.",
+        }
+    if any(k in combined for k in ("assert", "exit code", "test", "rollback", "regression", "timeout", "offline")):
+        return {
+            "rank": 3,
+            "tier": "TIER_3_REGRESSION_TEST",
+            "directive": "Lock behavior with an automated unit test in .agents/scripts/tests/.",
+        }
+    return {
+        "rank": 4,
+        "tier": "TIER_4_SKILL_PROSE_LAST_RESORT",
+        "directive": "Fallback: append concise guard clause to target SKILL.md (weakest defense; prefer code check if possible).",
+    }
 
-    def get_digest(self) -> str:
-        active = self.get_all_observations()
 
-        if os.path.exists(self.active_path):
-            with open(self.active_path, "r", encoding="utf-8", errors="replace") as f:
-                raw = f.read()
-            if "## Observation " in raw and len(active) == 0:
-                return "OBSERVATION SCAN BROKEN"
+def run_skill_doctor() -> Dict[str, Any]:
+    """
+    Telemetry-Driven Shim Flywheel & Skill Doctor:
+    Audits all domain skills and foundation rules for trigger-only frontmatter hygiene,
+    byte-budget footprint, and actual firing frequency in .orion/orion.db telemetry.
+    """
+    skills_dir = os.path.join(BASE_DIR, "skills")
+    rules_dir = os.path.join(BASE_DIR, "rules")
+    db_path = os.path.join(WORKSPACE_DIR, ".orion", "orion.db")
 
-        open_count = sum(1 for e in active if e.get("status") == "open")
-        parked_count = sum(1 for e in active if e.get("status") == "parked")
-        targets = [e.get("target") or e.get("rule_id") for e in active if e.get("target") or e.get("rule_id")]
-        top_target = targets[0] if targets else "none"
-
-        # Check Head Generation if available
-        head_gen_label = "none"
+    telemetry_counts: Dict[str, int] = {}
+    if os.path.isfile(db_path):
+        conn = None
         try:
-            from core.memory import RecallMemoryManager
-            with RecallMemoryManager() as rm:
-                head = rm.get_head_generation()
-                if head:
-                    head_gen_label = f"G{head.get('generation_count', 0)}"
+            conn = connect_sqlite(db_path)
+            cur = conn.cursor()
+            cur.execute("SELECT event_type, COUNT(*) FROM telemetry GROUP BY event_type")
+            for evt_name, cnt in cur.fetchall():
+                if evt_name:
+                    telemetry_counts[str(evt_name).lower()] = telemetry_counts.get(str(evt_name).lower(), 0) + int(cnt)
+            cur.execute("SELECT name, COUNT(*) FROM spans GROUP BY name")
+            for sp_name, cnt in cur.fetchall():
+                if sp_name:
+                    telemetry_counts[str(sp_name).lower()] = telemetry_counts.get(str(sp_name).lower(), 0) + int(cnt)
         except Exception:
             pass
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
-        return f"gen={head_gen_label} open={open_count} parked={parked_count} top-target={top_target}"
+    skill_reports = []
+    if os.path.isdir(skills_dir):
+        for sk_name in sorted(os.listdir(skills_dir)):
+            sk_path = os.path.join(skills_dir, sk_name, "SKILL.md")
+            if not os.path.isfile(sk_path) or sk_name.startswith(".") or sk_name == "internal":
+                continue
+            with open(sk_path, "r", encoding="utf-8", errors="ignore") as _sf:
+                content = _sf.read()
+            byte_len = len(content.encode("utf-8"))
+            m = re.match(r"^---\s*\n(.*?)\n---", content, re.DOTALL)
+            fm_text = m.group(1) if m else ""
+            trigger_only = bool(re.search(r"description:\s*(?:>-\s*\n\s*)?Use\s+(?:when|before)\b", fm_text))
+            sidecar_views = 0
+            sidecar_p = os.path.join(skills_dir, sk_name, ".sidecar.json")
+            if os.path.isfile(sidecar_p):
+                try:
+                    with open(sidecar_p, "r", encoding="utf-8") as _scf:
+                        sc_obj = json.load(_scf)
+                    sidecar_views = int(sc_obj.get("view", 0)) + int(sc_obj.get("use", 0))
+                except Exception:
+                    pass
+            firings = sidecar_views + sum(cnt for k, cnt in telemetry_counts.items() if sk_name.lower() in k)
+            elastic_role = (
+                "BUDGET_SCAFFOLD_SHIM"
+                if sk_name in ("strict-tdd", "systematic-debugging", "worker-delegate", "cost-optimizer", "session-offload")
+                else "CORE_DOMAIN_RUNBOOK"
+            )
+            skill_reports.append({
+                "skill": sk_name,
+                "bytes": byte_len,
+                "trigger_only_compliant": trigger_only,
+                "telemetry_firings": firings,
+                "elastic_role": elastic_role,
+                "status": "HEALTHY" if trigger_only and byte_len <= 24000 else "WARN_BLOAT",
+            })
 
+    total_skills = len(skill_reports)
+    compliant_count = sum(1 for s in skill_reports if s["trigger_only_compliant"])
+    return {
+        "ok": True,
+        "total_skills": total_skills,
+        "trigger_only_compliant": compliant_count,
+        "skills": skill_reports,
+    }
+
+
+
+from core.observation import ObservationLedger as _BaseObservationLedger
+
+
+class ObservationLedger(_BaseObservationLedger):
+    """
+    Canonical ObservationLedger extending core.observation.ObservationLedger
+    with command-tier generational rollover and archival resolution.
+    """
     def rollover_generation(self, max_active_keep: int = 10) -> Dict[str, Any]:
         """
         Synthesizes older active/actioned observations into a compact Head Reflection
@@ -905,20 +711,17 @@ def mine_operator_habits(workspace_dir: Optional[str] = None, profile_path: Opti
                 "proposes_skill": f"propose_skill_{'_and_'.join(gram)}"
             })
 
-    catches_file = os.path.join(orion_working, "mechanical_catches.json")
-    if os.path.exists(catches_file):
-        try:
-            with open(catches_file, "r", encoding="utf-8", errors="replace") as f:
-                catches = json.load(f)
-                if isinstance(catches, list):
-                    for c in catches:
-                        ctx = c.get("context", "unknown")
-                        correction_heatmap[ctx] += 1
-                        if "verify" in ctx.lower() or "gate" in ctx.lower():
-                            verify_failures += 1
-        except Exception as _ce:
-            _log_telemetry(_ce, "reflexion:mine_habits_read_catches")
-
+    try:
+        from core.db import drain_mechanical_catches
+        catches = drain_mechanical_catches(clear=False)
+        for c in catches:
+            if isinstance(c, dict):
+                ctx = c.get("context", "unknown")
+                correction_heatmap[ctx] += 1
+                if "verify" in ctx.lower() or "gate" in ctx.lower():
+                    verify_failures += 1
+    except Exception as _ce:
+        _log_telemetry(_ce, "reflexion:mine_habits_read_catches")
     profile_data = {
         "timestamp": datetime.now().isoformat(),
         "tool_histogram": dict(tool_histogram),
@@ -1017,16 +820,12 @@ class PromptRuleCompiler:
                     if isinstance(node, ast.FunctionDef) and node.name.startswith("check_"):
                         chk_name = node.name.replace("check_", "").replace("_", "-").lower()
                         enforced_ids.add(chk_name)
-                        for part in chk_name.split("-"):
-                            if len(part) > 3:
-                                enforced_ids.add(part)
                     elif isinstance(node, ast.Constant) and isinstance(node.value, str):
                         val = node.value.strip().lower()
-                        for prefix in ("gate ", "check "):
-                            if val.startswith(prefix):
-                                clean_val = val.split(":", 1)[-1].strip().replace(" ", "-").replace("&", "").replace("--", "-")
-                                if clean_val:
-                                    enforced_ids.add(clean_val)
+                        if re.match(r"^gate\s+\d+\s*:", val):
+                            clean_val = val.split(":", 1)[-1].strip().replace(" ", "-").replace("&", "").replace("--", "-")
+                            if clean_val and len(clean_val) <= 40:
+                                enforced_ids.add(clean_val)
             except Exception as _e:
                 _log_telemetry(_e, "reflexion.py:ast_parse_verify_agents")
 
@@ -1058,29 +857,34 @@ class PromptRuleCompiler:
             except Exception as _e:
                 _log_telemetry(_e, "reflexion.py:ast_parse_audit_aesthetics")
 
-        # Core mechanical categories
+        # Core mechanical categories (AST-verified gates & hooks)
         enforced_ids.update({
-            "security", "mechanical", "protocol", "link", "hygiene",
+            "security", "mechanical", "hygiene",
             "context-lint", "instruction-lint", "schema-cohesion",
             "version-synchronization", "router-parity", "ast-security",
             "ast-sql-injection", "ast-command-injection", "ast-hardcoded-secret",
             "no-empty-catch", "security-integrity", "portability-hygiene",
-            "rtk", "token", "prompt-security", "trojan-source"
+            "rtk", "token", "prompt-security", "trojan-source",
+            "commit", "git-workflow", "verification-gate", "state-Transition"
         })
         return enforced_ids
 
     def audit_rule_enforcement(self) -> Dict[str, Any]:
         rules: List[Dict[str, Any]] = []
+        non_rule_headings = {
+            "global", "purpose", "overview", "summary", "introduction",
+            "why fsm?", "example", "examples", "notes", "references"
+        }
         if os.path.exists(self.matrix_dir):
-            for fname in os.listdir(self.matrix_dir):
-                if fname.endswith('.json'):
+            for fname in sorted(os.listdir(self.matrix_dir)):
+                if fname.endswith('.json') and fname != "RULES_INDEX.json":
                     fp = os.path.join(self.matrix_dir, fname)
                     try:
                         with open(fp, 'r', encoding='utf-8', errors='ignore') as f:
                             data = json.load(f)
                             if isinstance(data, dict):
                                 for k, v in data.items():
-                                    if k == "global":
+                                    if k.strip().lower() in non_rule_headings:
                                         continue
                                     rules.append({
                                         "source_matrix": fname,
@@ -1090,14 +894,14 @@ class PromptRuleCompiler:
                     except Exception as e:
                         _log_telemetry(e, 'reflexion.py:audit_rules:load')
 
-        enforced_registry = self._load_deterministic_rule_ids()
+        enforced_registry = {e.lower() for e in self._load_deterministic_rule_ids() if len(e) >= 5}
         enforced = []
         advisory_only = []
 
         for r in rules:
             rid = str(r['id']).lower().replace("_", "-")
             k_clean = re.sub(r'[^a-zA-Z0-9\s-]', ' ', str(r['id'])).lower()
-            words = [w for w in k_clean.split() if len(w) > 3]
+            words = [w for w in k_clean.split() if len(w) >= 5]
             is_enforced = (
                 any(rid == eid or rid.startswith(eid) or eid in rid for eid in enforced_registry)
                 or any(w in enforced_registry for w in words)
@@ -2334,6 +2138,8 @@ def main():
     obs_res.add_argument("--status", default="actioned", choices=["actioned", "declined", "superseded"], help="Target status")
 
     subparsers.add_parser("habits", help="Mine operator habits and action n-grams into operator_profile.json")
+    sd_parser = subparsers.add_parser("skill-doctor", help="Audit skill trigger hygiene, byte budget, and shim telemetry")
+    sd_parser.add_argument("--json", action="store_true", help="JSON output")
 
     parsed_args = parser.parse_args(sys.argv[1:])
 
@@ -2466,6 +2272,15 @@ def main():
         else:
             print(f"[ERROR] Failed to mine operator habits: {res.get('error')}")
             sys.exit(1)
+    elif parsed_args.subcommand == "skill-doctor":
+        rep = run_skill_doctor()
+        if getattr(parsed_args, "json", False):
+            print(json.dumps(rep, indent=2))
+        else:
+            print(f"\n🩺 Orion Skill Doctor & Shim Flywheel Audit ({rep['trigger_only_compliant']}/{rep['total_skills']} Trigger-Only Compliant)")
+            print("=" * 75)
+            for s in rep["skills"]:
+                print(f"  • {s['skill']:22s} | {s['bytes']:6d} B | Trigger-Only: {'YES' if s['trigger_only_compliant'] else 'NO '} | Role: {s['elastic_role']}")
     else:
         parser.print_help()
 

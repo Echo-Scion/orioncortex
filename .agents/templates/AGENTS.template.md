@@ -1,6 +1,6 @@
 # Workspace Rules & Mandates: {project_name}
 
-<!-- START FOUNDATION MANDATES (Version: 0.1.1 - English First & Built-In Lessword) -->
+<!-- START FOUNDATION MANDATES (Version: 0.1.2 - English First & Built-In Lessword) -->
 > **CRITICAL HABITAT NOTICE:** Master BIOS & Active Router. Defines operational constraints and Auto-Pilot knowledge routing for `{project_name}`.
 
 ## 1. CORE GUARDRAILS (Always Active)
@@ -31,8 +31,8 @@ These rules define non-negotiable operational boundaries and execution invariant
 Sequence adapts to task complexity; do not run full sequence for simple tasks:
 0. **Universal Agnostic Grounding (Cold-Start Anchor)**: Internalize from Turn 1 that .agents is multi-platform, multi-project, multi-OS, and universal agnostic. Ground all code generation in active OS environment (PowerShell vs POSIX) and 4-Pillar sovereign architecture.
 1. Perform **Internal Routing Analysis** against JIT table in §4. If a match is found, load target file with `read_file` in first turn.
-2. If `.orion/working/ACTIVE_TASK.md` exists, read it FIRST and execute ONLY that single atomic Bento task before running verification gate (`python .agents/scripts/orion.py bento next --verify`).
-3. If `.orion/working/context.json` exists, read it to load `active_bento_task`, `recovery_instruction`, and `drift_warnings`. If `.orion/working/handoff.md` exists and resuming a session, inspect Resume Point.
+2. **Direct Execution Default vs Bento Slicing**: Tasks touching <=2 files execute directly (`Edit -> Verify`) with zero planning or Bento ceremony. If `.orion/working/ACTIVE_TASK.md` exists, read it FIRST and execute ONLY that single atomic Bento task (`python .agents/scripts/orion.py bento next --verify`).
+3. **Stateless IDE Tabs (Repo-Centric State)**: IDE chat tabs are disposable; state lives in `git status`/`git diff` and `.orion/orion.db`. Read `.orion/working/context.json` for `active_bento_task`, `recovery_instruction`, and `drift_warnings`.
 4. **For PREMIUM tasks only**: Execute `python .agents/scripts/orion.py brain sync "<intent> <synonym1> <synonym2>"` to inject dynamic knowledge graph context.
 *Default Python execution: Use `python` (fallback to `python3`).*
 
@@ -121,12 +121,7 @@ Remind user which Cloud Model Tier to select in IDE dropdown for upcoming `NEXT 
 Recommend slash commands in `NEXT TASK` when relevant (`/plan`, `/strict-tdd`, `/integrity-sentinel`). When diagnosing an error or debt, `NEXT TASK` MUST NOT be `"None"`.
 
 **Footer Contracts (Clean Lines — No placeholders or multi-line logs)**:
-- **Conversational / Q&A Turn**:
-  ```
-  🚦 **CHECKPOINT**: [Brief summary of answer]
-  ⚡ **RECOMMENDED TIER**: [BUDGET | STANDARD | PREMIUM] — [1-phrase rationale]
-  🔮 **NEXT TASK**: [Immediate next step or "None"]
-  ```
+- **Conversational / Pure Q&A Turn**: Omit boilerplate footer (include `RECOMMENDED TIER` and `NEXT TASK` only when handing off an actionable next task).
 - **Execution / Tool Turn**:
   ```
   🚦 **CHECKPOINT**: [Brief summary of what was accomplished]
@@ -171,7 +166,7 @@ Every implementation plan (`implementation_plan.md`) MUST include in its top hea
    - **Bottom-Up Same-File Ordering**: Highest line number to lowest line number for same-file edits.
 
 ---
-*Mandate Version: 0.1.1 (English First & Built-In Lessword)*
+*Mandate Version: 0.1.2 (English First & Built-In Lessword)*
 <!-- END FOUNDATION MANDATES -->
 
 ## PROJECT-SPECIFIC MANDATES
@@ -179,9 +174,9 @@ Every implementation plan (`implementation_plan.md`) MUST include in its top hea
 
 ### Cross-Platform Shell & Execution Invariants
 - **Windows / PowerShell Invariants**:
-  - *No Complex Inline Python (`python -c`)*: Avoid inline `python -c` snippets with quotes/regex. Use temporary scratch files or native file tools to prevent PowerShell quote stripping and syntax errors.
+  - *No Complex Inline Python (`python -c`)*: Avoid inline `python -c` snippets with quotes/regex. Use temporary scratch files or native file tools to prevent PowerShell quote stripping and syntax errors. Bulk file mutations (`os.walk` + `open(..., 'w')`) and self-truncation one-liners (`open(w).write(open(r).read())`) are strictly forbidden.
   - *Mandatory UTF-8 Mode (`python -X utf8`)*: Terminal commands running Python on Windows must include `-X utf8` (or `PYTHONUTF8=1`) to prevent CP-1252 `UnicodeEncodeError`.
-  - *CRLF / LF Exact Matching in `edit_file`*: Windows Git checkouts may use CRLF. Antigravity's `edit_file` requires exact byte matching. When edits fail with "Target was not found", normalize files to LF via `.gitattributes` (`* text=auto eol=lf`).
+  - *CRLF / LF Exact Matching in `edit_file`*: Windows Git checkouts may use CRLF. Antigravity's `edit_file` requires exact byte matching. When edits fail with "Target was not found", normalize files to LF via `.gitattributes` (`* text=auto eol=lf`) and `git add --renormalize .` (never via raw script overwrite).
   - *RTK Hook-First & Transparent Optimization*: The official Antigravity RTK plugin (`rtk init -g --agent antigravity`) intercepts and token-optimizes commands automatically via PreToolUse hook. Use manual `rtk` prefixing for meta-commands (`rtk gain`), in subshell scripts, or use `rtk proxy <cmd>` when bypass is needed.
   - *PowerShell Command Separators*: Never use `&&` in Windows PowerShell 5.1; use `;` or dispatch commands separately.
 - **POSIX / Linux / macOS (bash/zsh) Invariants**:

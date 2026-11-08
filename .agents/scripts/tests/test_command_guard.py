@@ -203,6 +203,44 @@ class TestCommandGuard(unittest.TestCase):
             decision, _ = evaluate_command_guard(cmd, self.workspace_dir)
             self.assertEqual(decision, "allow")
 
+    def test_inline_self_truncation_blocked(self):
+        incident_cmd = (
+            "python -c \"import os; [open(os.path.join(r, f), 'wb').write("
+            "open(os.path.join(r, f), 'rb').read().replace(b'\\r\\n', b'\\n')) "
+            "for r, d, fs in os.walk('.') if not any(x in r for x in ['.git', '.orion']) "
+            "for f in fs if f.endswith(('.md', '.py', '.json', '.yaml', '.yml'))]\""
+        )
+        truncating_cmds = [
+            incident_cmd,
+            "open('file.txt', 'w').write(open('file.txt', 'r').read())",
+            "open('out.bin', 'wb').write(open('in.bin', 'rb').read())",
+            "open('config.json', 'w', encoding='utf-8').write(open('config.json').read())",
+        ]
+        for cmd in truncating_cmds:
+            decision, reason = evaluate_command_guard(cmd, self.workspace_dir)
+            self.assertEqual(decision, "block", f"Failed to block lethal truncation in: {cmd}")
+            self.assertIn("GUARD-INLINE-01", reason)
+
+    def test_inline_bulk_write_blocked(self):
+        bulk_cmds = [
+            "python -c \"import os; [open(os.path.join(r, f), 'w').write('foo') for r, d, fs in os.walk('.') for f in fs]\"",
+            "python -c \"from pathlib import Path; [p.write_text('bar') for p in Path('.').rglob('*.md')]\"",
+            "python -c \"import os; [os.remove(os.path.join(r, f)) for r, d, fs in os.walk('.') for f in fs]\"",
+        ]
+        for cmd in bulk_cmds:
+            decision, reason = evaluate_command_guard(cmd, self.workspace_dir)
+            self.assertEqual(decision, "block", f"Failed to block bulk write in: {cmd}")
+            self.assertIn("GUARD-INLINE-02", reason)
+
+    def test_inline_diagnostic_allowed(self):
+        diag_cmds = [
+            "python -c \"content = open('.agents/rules/tier-execution-protocol.md', 'rb').read(); print('CRLF' if b'\\r\\n' in content else 'LF')\"",
+            "python -c \"import os; print([os.path.join(r, f) for r, d, fs in os.walk('.') for f in fs if f.endswith('.md')])\"",
+        ]
+        for cmd in diag_cmds:
+            decision, _ = evaluate_command_guard(cmd, self.workspace_dir)
+            self.assertEqual(decision, "allow", f"False positive on diagnostic: {cmd}")
+
 
 if __name__ == "__main__":
     unittest.main()

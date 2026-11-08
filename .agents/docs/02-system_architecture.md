@@ -57,24 +57,39 @@ The `AGENTS.md` file (with host adapter aliases such as `GEMINI.md` and `CLAUDE.
 
 During session bootstrap, if `.orion/working/ACTIVE_TASK.md` exists, the agent reads it first and executes only that single atomic Bento task before running `python .agents/scripts/orion.py bento next --verify`.
 
-To prevent context bloat, agents do not preload all rules. When a prompt matches a recognized trigger, the agent loads the corresponding target immediately in the first turn:
+To prevent context bloat, agents do not preload all rules. The Master BIOS enforces a 49-row Just-In-Time (JIT) Knowledge Router (14 Foundation Rules + 35 Domain Skill & Lifecycle Routes) that loads the corresponding target immediately on Turn 1:
 
-| If User Prompt Relates To... | Immediately Load (view_file / Read) |
+| If User Prompt Relates To... | Immediately Load (`read_file`) |
 | :--- | :--- |
+| **Foundation Rules, Rules Catalog, Rule Index, Policy Lookup, /rules** | `.agents/rules/RULES_INDEX.md` |
+| **Model Tiers, Tier Routing, Bento Box Sizing, Task Slicing, Budget/Standard/Premium Execution** | `.agents/rules/tier-execution-protocol.md` |
+| **Security Guardrails, Absolute Constraints, Exploit Prevention, Injection Defense** | `.agents/rules/security-guardrails.md` & `.agents/skills/integrity-sentinel/SKILL.md` |
+| **Git Workflows, Branching, Worktrees, Commit Hygiene, PR Reviews, Dual-Loop Git** | `.agents/rules/development-operations.md` & `.agents/skills/code-review/SKILL.md` |
+| **Prompting Patterns, Sub-Agent Prompting, Anti-Drift Conditioning, Few-Shot Prompts** | `.agents/rules/prompting-patterns.md` & `.agents/skills/worker-delegate/SKILL.md` |
+| **RTK Rules, Token Proxy, rtk gain, Command Rewriting, Token Optimization** | `.agents/rules/antigravity-rtk-rules.md` & `.agents/skills/cost-optimizer/SKILL.md` |
+| **Performance, Latency, Speed, Optimization, Algorithmic Complexity** | `.agents/rules/performance-optimization.md` & `.agents/skills/cost-optimizer/SKILL.md` |
+| **Contradiction Resolution, Colliding Rules, Ambiguous Requirements, Rule Arbitration** | `.agents/rules/contradiction-protocol.md` |
+| **Memory Hygiene, GraphRAG Eviction, Episodic Memory GC, Context Cleanup** | `.agents/rules/memory-hygiene.md` & `.agents/skills/session-offload/SKILL.md` |
+| **Formal State Machine, FSM Crash Recovery, State Resumption, Task Interruption** | `.agents/rules/fsm-protocol.md` & `.agents/skills/app-lifecycle/SKILL.md` |
+| **Documentation, Copywriting, Readme, PR Description, Anti-Slop, Prose Authenticity** | `.agents/rules/prose-authenticity.md` |
+| **Four Pillars Architecture, Zero-Pip Sovereignty, Python Floor, Ollama, Rust, Bun** | `.agents/rules/four-pillars-architecture.md` |
+| **Obsidian Interoperability, Vault Export, Wikilinks, Second Brain Graph** | `.agents/rules/obsidian-interop.md` & `.agents/skills/brain-graph/SKILL.md` |
+| **Environment Prerequisites, Toolchain Setup, Doctor Check, Binary Verification** | `.agents/rules/prerequisites.md` & `.agents/DEPLOY_ME.md` |
 | **Setup .agents, Onboard Workspace, Doctor Check, Install Pillars, Activate Obsidian Vault / Second Brain** | `.agents/DEPLOY_ME.md` |
-| **New Project, Init, Scaffold, Start from Scratch** | `.agents/skills/app-lifecycle/references/project-init.md` |
+| **Cold Start, Session Start, Bootstrap Session, Resume Session, Project Orientation, Where Were We, /cold-start** | `context/VISION.md` & `.agents/skills/app-lifecycle/references/session-bootstrap.md` |
+| **New Project, Init, Scaffold, Start from Scratch** | `.agents/canons/ecosystems/{{FRAMEWORK}}/{{FRAMEWORK}}-init.md` & `.agents/skills/app-lifecycle/references/project-init.md` |
 | **Legacy Migration, Brownfield, Onboard Existing, Migrate Project** | `.agents/skills/app-lifecycle/references/project-migrate.md` |
-| **Feature Scaffold, App Builder, New Model, Repository, Screen, End-to-End Feature Creation** | `.agents/skills/app-lifecycle/references/app-builder.md` |
+| **Feature Scaffold, App Builder, New Model, Repository, Screen, End-to-End Feature Creation** | `.agents/canons/ecosystems/{{FRAMEWORK}}/{{FRAMEWORK}}-feature-recipe.md` & `.agents/skills/app-lifecycle/references/app-builder.md` |
 | **Business Strategy, Growth, Idea Viability, Planning** | `.agents/skills/saas-strategist/SKILL.md` |
-| **System Architecture, Database Schema, Blueprint, Backend Logic, Node.js, API, Server, Cache** | `.agents/skills/project-architect/SKILL.md` |
-| **Frontend UI, Layout, Aesthetics, Visual Craft, Animations, Code Comment Hygiene** | `.agents/skills/ui-finish/SKILL.md` |
-| **Security Audit, QA, Testing, Bugs, Validation (App Code)** | `.agents/skills/integrity-sentinel/SKILL.md` |
+| **Feature Discovery, Socratic Elicitation, Requirements Intake, Zero-Trust Discovery** | `.agents/skills/feature-discovery/SKILL.md` |
+| **System Architecture, Database Schema, Blueprint, Spec, RFC, Design Review, Backend Logic, API, Server, Cache** | `.agents/skills/project-architect/SKILL.md` |
+| **Frontend UI, Layout, Aesthetics, Visual Craft, Animations, Code Comment Hygiene** | `.agents/skills/ui-finish/SKILL.md` & `.agents/canons/ecosystems/{{FRAMEWORK}}/{{FRAMEWORK}}-ui-patterns.md` |
+| **Security Audit, QA, Testing, Bugs, Validation (App Code), AI/LLM Attacks** | `.agents/skills/integrity-sentinel/SKILL.md` & `.agents/skills/integrity-sentinel/references/ai_llm_attacks.md` |
 | **Data Immutability, State Management, Transformers** | `.agents/skills/data-logic/SKILL.md` |
 | **API Contracts, Zod, Schemas, Request Validation** | `.agents/skills/api-contract/SKILL.md` |
 | **Orion, Knowledge Base, Ingest, Lint, Cross-reference** | `.agents/skills/brain-graph/SKILL.md` |
-| **Debugging, Errors, Crashes, Runtime Issues** | `.agents/skills/frontend-experience/SKILL.md` & `.agents/skills/systematic-debugging/SKILL.md` |
-| **Deployment, Build, Release, CI/CD, DevOps** | `.agents/skills/project-operator/SKILL.md` |
-| **Performance, Latency, Speed, Optimization** | `.agents/rules/performance-optimization.md` & `.agents/skills/cost-optimizer/SKILL.md` |
+| **Debugging, Errors, Crashes, Runtime Issues** | `.agents/skills/systematic-debugging/SKILL.md` (load `.agents/skills/frontend-experience/SKILL.md` ONLY for UI/widget state bugs) |
+| **Deployment, Build, Release, CI/CD, DevOps** | `.agents/canons/ecosystems/{{FRAMEWORK}}/{{FRAMEWORK}}-release.md` & `.agents/skills/project-operator/SKILL.md` |
 | **Cost Analysis, Token Budget, LLM Costs** | `python .agents/scripts/orion.py scan tokens` (Run it!) & `.agents/skills/cost-optimizer/SKILL.md` |
 | **meta-agent-admin, /meta-agent-admin, Audit .agents, Ecosystem Audit, Foundation Review, Template Health, System Mod, Rules** | `.agents/AGENTS_INDEX.md` & `.agents/skills/meta-agent-admin/SKILL.md` |
 | **Code Review, PR Review (App Code)** | `.agents/skills/code-review/SKILL.md` |
@@ -88,12 +103,13 @@ To prevent context bloat, agents do not preload all rules. When a prompt matches
 | **Agent Identity, Onboarding, Personality, Bootstrap** | `context/AGENT_IDENTITY.md` (or `.agents/templates/agent-identity-template.md` if uninitialized) |
 | **Temporal Pulse, Daily Summary, Weekly Synthesis** | `.agents/skills/self-evolve/references/temporal-pulse.md` |
 | **Worker Delegation, Sub-agent, Task Splitting** | `.agents/skills/worker-delegate/SKILL.md` |
-| **AI Engineering, Model Drift, Probabilistic Traits** | `.agents/skills/ai-engineer/SKILL.md` |
+| **AI Engineering, Model Drift, Probabilistic Traits, AI Hallucination, AI Attacks, MCP Vulnerabilities** | `.agents/skills/ai-engineer/SKILL.md` & `.agents/skills/integrity-sentinel/references/ai_llm_attacks.md` |
 | **Codebase Audit, Audit Ledger, Multi-Session Audit** | `.agents/skills/integrity-sentinel/references/audit-ledger.md` |
 | **Audit Vectors, Deep Diagnostic Matrix, Logic/Fail-Fast/Bloat/DRY** | `.agents/skills/integrity-sentinel/references/audit_vectors.md` |
 | **Business Rule Extraction, Conversational Context** | `.agents/skills/session-offload/references/auto-context.md` |
 | **Knowledge Extraction, Graph Triplet Ingestion** | `.agents/skills/brain-graph/references/knowledge-extraction.md` |
-| **Documentation, Copywriting, Readme, PR Description, Anti-Slop, Prose** | `.agents/rules/prose-authenticity.md` |
+| **Spec Drift, Documentation Drift, Blueprint-to-AST Parity** | `.agents/skills/integrity-sentinel/references/audit_vectors.md` |
+| **Platform Capabilities, Environment Scan, Native Slash Commands, orion env, /env** | `python .agents/scripts/orion.py env --platform` (Run it!) & `.agents/skills/app-lifecycle/references/platform-superpowers.md` |
 
 ---
 
@@ -279,7 +295,7 @@ To enable multi-model frontier code audits without file upload limit friction or
   - *Safe Polyglot I/O*: Reads files via `read_text_safe()` with `utf-8-sig` and `utf-16` fallback, eliminating BOM corruption.
   - *Single Root BIOS Deduplication*: Bundles only the canonical `AGENTS.md`, dropping duplicate aliases (`GEMINI.md`) in host app packages.
   - *DSL & Precondition Filtering*: Excludes Kotlin/Java preconditions (`require`, `check`) and scope functions (`let`, `run`, `apply`) from matching as function declarations.
-  - *CLI Entrypoint Preservation*: Preserves executable entrypoints in `bin/` (e.g. `bin/flutterin.mjs`).
+  - *CLI Entrypoint Preservation*: Preserves executable entrypoints in `bin/` (e.g. `bin/cli.mjs`).
   - *Symlink Loop Protection*: Enforces realpath containment and disables recursive symlink traversal.
 - **Balanced Subtree Bin-Packing**: Uses `balance_into_k_bundles()` with an overflow penalty to partition repository volume into at most 10 balanced Markdown files (`.md`) across isolated tier subfolders (`.orion/bundles/{arch,hybrid,full}/`).
 - **GitHub-Push Mirror ZIP Archiving (`pack_zip` / `--zip`)**: Creates clean repository ZIP archives matching the exact state of what would be pushed to GitHub. Uses fast `git ls-files` (`--cached` + unignored untracked files) with a transparent pure-Python `os.walk` + `GitIgnoreFilter` fallback outside Git. Strictly excludes `.git/`, `.orion/`, caches, and `.gitignore` patterns while preserving binaries, images, configs, and lockfiles.

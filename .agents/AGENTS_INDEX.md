@@ -134,6 +134,84 @@ activation: when navigating the ecosystem or seeking an overview of agent capabi
 - **temporal-pulse**: `.agents/skills/self-evolve/references/temporal-pulse.md`
 
 
+
+## 3. 📜 CANONS (Ecosystem Standards & Production Blueprints)
+*Definitive production standards, hardware recipes, and architecture patterns across supported frameworks.*
+
+### Android Canons
+- **Android Standards**: `.agents/canons/ecosystems/android/android-standards.md`
+- **Android Feature Recipe**: `.agents/canons/ecosystems/android/android-feature-recipe.md`
+- **Android Debugging**: `.agents/canons/ecosystems/android/android-debug.md`
+- **Android Init**: `.agents/canons/ecosystems/android/android-init.md`
+- **Android Release**: `.agents/canons/ecosystems/android/android-release.md`
+- **Android Tests**: `.agents/canons/ecosystems/android/android-tests.md`
+- **Android UI Patterns**: `.agents/canons/ecosystems/android/android-ui-patterns.md`
+- **Android Compose UI**: `.agents/canons/ecosystems/android/ui-compose.md`
+- **Android XML Views**: `.agents/canons/ecosystems/android/ui-xml-views.md`
+- **AVD Lightweight**: `.agents/canons/ecosystems/android/avd-lightweight.md`
+- **Android Ecosystem Registry**: `.agents/canons/ecosystems/android/ecosystem.json`
+
+### Flutter Canons
+- **Flutter Standards**: `.agents/canons/ecosystems/flutter/flutter-standards.md`
+- **Flutter Feature Recipe**: `.agents/canons/ecosystems/flutter/flutter-feature-recipe.md`
+- **Flutter Anti-Split Formula**: `.agents/canons/ecosystems/flutter/flutter-anti-split-formula.md`
+- **Flutter App Hardening**: `.agents/canons/ecosystems/flutter/flutter-app-hardening.md`
+- **Flutter Data Patterns**: `.agents/canons/ecosystems/flutter/flutter-data-patterns.md`
+- **Flutter Debugging**: `.agents/canons/ecosystems/flutter/flutter-debug.md`
+- **Flutter Debugger Engine**: `.agents/canons/ecosystems/flutter/flutter-debugger.md`
+- **Flutter Hardware Shaders**: `.agents/canons/ecosystems/flutter/flutter-hardware-shaders.md`
+- **Flutter Init**: `.agents/canons/ecosystems/flutter/flutter-init.md`
+- **Flutter Local Agentic**: `.agents/canons/ecosystems/flutter/flutter-local-agentic.md`
+- **Flutter Logic Patterns**: `.agents/canons/ecosystems/flutter/flutter-logic-patterns.md`
+- **Flutter Micro**: `.agents/canons/ecosystems/flutter/flutter-micro.md`
+- **Flutter Release**: `.agents/canons/ecosystems/flutter/flutter-release.md`
+- **Flutter State Map**: `.agents/canons/ecosystems/flutter/flutter-state-map.md`
+- **Flutter Testing Patterns**: `.agents/canons/ecosystems/flutter/flutter-testing-patterns.md`
+- **Flutter Tests**: `.agents/canons/ecosystems/flutter/flutter-tests.md`
+- **Flutter UI Patterns**: `.agents/canons/ecosystems/flutter/flutter-ui-patterns.md`
+- **Flutter Workflow Commands**: `.agents/canons/ecosystems/flutter/flutter-workflow-commands.md`
+- **Liquid Glass Widgets**: `.agents/canons/ecosystems/flutter/liquid-glass-widgets.md`
+- **Flutter Ecosystem Registry**: `.agents/canons/ecosystems/flutter/ecosystem.json`
+
+### Python Canons
+- **Python Standards**: `.agents/canons/ecosystems/python/python-standards.md`
+- **Python Feature Recipe**: `.agents/canons/ecosystems/python/python-feature-recipe.md`
+- **Python Debugging**: `.agents/canons/ecosystems/python/python-debug.md`
+- **Python Init**: `.agents/canons/ecosystems/python/python-init.md`
+- **Python Release**: `.agents/canons/ecosystems/python/python-release.md`
+- **Python Tests**: `.agents/canons/ecosystems/python/python-tests.md`
+- **Python UI Patterns**: `.agents/canons/ecosystems/python/python-ui-patterns.md`
+- **Python Ecosystem Registry**: `.agents/canons/ecosystems/python/ecosystem.json`
+
+### React Canons
+- **React Standards**: `.agents/canons/ecosystems/react/react-standards.md`
+- **React Feature Recipe**: `.agents/canons/ecosystems/react/react-feature-recipe.md`
+- **React Debugging**: `.agents/canons/ecosystems/react/react-debug.md`
+- **React Init**: `.agents/canons/ecosystems/react/react-init.md`
+- **React Release**: `.agents/canons/ecosystems/react/react-release.md`
+- **React Tests**: `.agents/canons/ecosystems/react/react-tests.md`
+- **React UI Patterns**: `.agents/canons/ecosystems/react/react-ui-patterns.md`
+- **React Ecosystem Registry**: `.agents/canons/ecosystems/react/ecosystem.json`
+
+### Global & Micro Canons
+- **Core Architecture Canon**: `.agents/canons/global/core-architecture.md`
+- **CLI Bot Architecture**: `.agents/canons/global/cli-bot-architecture.md`
+- **Global Invariants Registry**: `.agents/canons/global/invariants_registry.json`
+- **AI Brands Canon**: `.agents/canons/global/ai_brands.json`
+- **Icon Registry**: `.agents/canons/icons/registry.json`
+- **Jargon Dictionary**: `.agents/canons/lexicons/jargon_dict.json`
+- **Micro Canons (Flutter)**: `.agents/canons/micro/flutter.md`
+- **Micro Canons (Pubspec)**: `.agents/canons/micro/pubspec.md`
+- **Micro Canons (Python)**: `.agents/canons/micro/python.md`
+- **Micro Canons (React)**: `.agents/canons/micro/react.md`
+- **Micro Canons (Supabase)**: `.agents/canons/micro/supabase.md`
+- **Micro Canons Overview**: `.agents/canons/micro/README.md`
+- **Local Canons Overview**: `.agents/canons/local/README.md`
+- **Harnesses Overview**: `.agents/canons/global/harnesses/README.md`
+- **Base Action Verifier**: `.agents/canons/global/harnesses/base_action_verifier.py`
+- **Migration Verifier**: `.agents/canons/global/harnesses/migration_verifier.py`
+- **Secrets Scan Verifier**: `.agents/canons/global/harnesses/secrets_scan_verifier.py`
+
 ## 4. 🧰 CORE SCRIPTS (The Execution Engine)
 *Python scripts that power the ecosystem, triggered by hooks or manual orchestration.*
 
@@ -156,6 +234,37 @@ activation: when navigating the ecosystem or seeking an overview of agent capabi
 - **state_machine**: `.agents/scripts/commands/state_machine.py` (FSM Engine)
 - **observatory**: `.agents/scripts/commands/observatory.py` (Obsidian Vault Export & Second Brain Protocol Manager; CLI: `vault`, `observatory`)
 - **verify_agents**: `.agents/scripts/commands/verify_agents.py` (Mechanical & Security Verifier)
+
+- **core_init**:  (Core module package root)
+- **worktree**:  (Isolated Git worktree management)
+- **worktree_core**:  (Worktree seeding and fast cloning)
+- **polluter_finder**:  (Test suite polluter & bisect finder)
+- **platform_manifests**:  (Multi-IDE platform manifests and delegation)
+- **design_harvester**:  (Design tokens & UI archetype harvester)
+- **galaxy**:  (Multi-project portfolio mesh & constellation manager)
+- **decisions**:  (Living architectural decisions ledger)
+- **worker**:  (Autonomous worker role pipeline)
+- **spoke_mesh**:  (Hub-and-spoke multi-repo sync mesh)
+- **upgrade_engine**:  (Surgical foundation upgrade engine)
+- **observation**:  (Observation ledger persistence & FTS5 sync)
+- **memory**:  (Multi-layer episodic & semantic memory engine)
+- **rtk-pre-tool**:  (Pre-tool token budgeting and command gate hook)
+
+- **core_init**:  (Core module package root)
+- **core_init**: `.agents/scripts/core/__init__.py`
+- **worktree**: `.agents/scripts/commands/worktree.py` (Isolated Git worktree management)
+- **worktree_core**: `.agents/scripts/core/worktree.py` (Worktree seeding and fast cloning)
+- **polluter_finder**: `.agents/scripts/commands/polluter_finder.py` (Test suite polluter & bisect finder)
+- **platform_manifests**: `.agents/scripts/core/platform_manifests.py` (Multi-IDE platform manifests and delegation)
+- **design_harvester**: `.agents/scripts/core/design_harvester.py` (Design tokens & UI archetype harvester)
+- **galaxy**: `.agents/scripts/commands/galaxy.py` (Multi-project portfolio mesh & constellation manager)
+- **decisions**: `.agents/scripts/commands/decisions.py` (Living architectural decisions ledger)
+- **worker**: `.agents/scripts/commands/worker.py` (Autonomous worker role pipeline)
+- **spoke_mesh**: `.agents/scripts/core/spoke_mesh.py` (Hub-and-spoke multi-repo sync mesh)
+- **upgrade_engine**: `.agents/scripts/core/upgrade_engine.py` (Surgical foundation upgrade engine)
+- **observation**: `.agents/scripts/core/observation.py` (Observation ledger persistence & FTS5 sync)
+- **memory**: `.agents/scripts/core/memory.py` (Multi-layer episodic & semantic memory engine)
+- **rtk-pre-tool**: `.agents/hooks/rtk-pre-tool.py` (Pre-tool token budgeting and command gate hook)
 
 ## 5. 📚 ARCHITECTURE & REFERENCE REGISTRIES
 *Curated protocol standards, domain taxonomies, and capability registries.*

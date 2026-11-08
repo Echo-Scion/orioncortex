@@ -140,6 +140,7 @@ TRANSITIONAL_ALLOWED: Dict[str, Set[str]] = {
 
 ROOT_ALLOWED = {
     "VISION.md",
+    "VISION.draft.md",
     "README.md",
     "MIGRATION_MAP.md",
     "AGENT_IDENTITY.md",
@@ -459,6 +460,11 @@ def check_foundation_sync(res: AuditResult, verbose: bool = True):
                 found_keys = set(found_hashes.keys())
                 
                 missing = found_keys - local_keys
+                if folder == "canons":
+                    missing = {
+                        k for k in missing
+                        if not k.replace("\\", "/").startswith(("ecosystems/", "micro/", "local/"))
+                    }
                 extra = local_keys - found_keys
                 raw_modified = {k for k in local_keys & found_keys if local_hashes[k] != found_hashes[k]}
                 modified = set()
@@ -524,7 +530,25 @@ def check_mechanical_integrity(res: AuditResult, verbose: bool = True):
             ext = os.path.splitext(filepath)[1].lower()
             if ext == ".py":
                 try:
-                    ast.parse(content, filename=filepath)
+                    tree = ast.parse(content, filename=filepath)
+                    norm_rel = rel_path.replace("\\", "/")
+                    if norm_rel.startswith("scripts/") and "/tests/" not in norm_rel:
+                        for node in tree.body:
+                            if isinstance(node, ast.ClassDef) and not node.bases:
+                                cls_reg = getattr(res, "_seen_root_classes", None)
+                                if cls_reg is None:
+                                    cls_reg = {}
+                                    setattr(res, "_seen_root_classes", cls_reg)
+                                prev_file = cls_reg.get(node.name)
+                                if prev_file and prev_file != norm_rel:
+                                    res.add_error(
+                                        "ANTI_PATCHWORK_DUPLICATE_CLASS",
+                                        f"Uninherited duplicate class '{node.name}' in {norm_rel} (already defined in {prev_file}). Subclass or import from core/.",
+                                        rel_path,
+                                        severity="HIGH",
+                                    )
+                                else:
+                                    cls_reg[node.name] = norm_rel
                 except SyntaxError as se:
                     res.add_error("SYNTAX", f"Python syntax error: {se}", rel_path)
             elif ext == ".json":
@@ -544,7 +568,6 @@ def check_mechanical_integrity(res: AuditResult, verbose: bool = True):
                     res.add_error("MECHANICAL", "Absolute path detected in Python file", rel_path)
         except Exception as e:
             res.add_error("IO", f"Could not read file: {str(e)}", rel_path)
-
 def find_line_num(text: str, token: str) -> int:
     idx = text.find(token)
     if idx == -1:
@@ -669,7 +692,7 @@ def check_links(res: AuditResult, verbose: bool = True):
                     (skill_dir_target and os.path.exists(skill_dir_target))
                 )
                 if not exists and "skills/internal" not in target.replace('\\', '/'):
-                    if not (IS_SPOKE and target.replace('\\', '/').startswith("canons/ecosystems/")):
+                    if not (IS_SPOKE and target.replace('\\', '/').startswith(("canons/ecosystems/", "canons/micro/", "canons/local/"))):
                         line_no = find_line_num(content, match.group(0))
                         res.add_error("LINK", f"Broken backticked file reference: `{target}`", f"{rel_path}:{line_no}")
 
@@ -691,7 +714,7 @@ def check_links(res: AuditResult, verbose: bool = True):
                 # Resolve relative path
                 target_path = os.path.normpath(os.path.join(os.path.dirname(filepath), l_clean))
                 if not os.path.exists(target_path):
-                    if not (IS_SPOKE and "canons/ecosystems/" in l_clean.replace('\\', '/')):
+                    if not (IS_SPOKE and any(p in l_clean.replace('\\', '/') for p in ("canons/ecosystems/", "canons/micro/", "canons/local/"))):
                         line_no = find_line_num(content, link)
                         res.add_error("LINK", f"Broken markdown link: {l_clean}", f"{rel_path}:{line_no}")
 
@@ -833,7 +856,7 @@ def check_ghost_references(res: AuditResult, verbose: bool = True):
                 target_full = os.path.normpath(os.path.join(BASE_DIR, target_rel))
                 target_workspace = os.path.normpath(os.path.join(PROJECT_ROOT, target_rel))
                 if not os.path.exists(target_full) and not os.path.exists(target_workspace) and "skills/internal" not in target_rel.replace('\\', '/'):
-                    if not (IS_SPOKE and target_rel.replace('\\', '/').startswith("canons/ecosystems/")):
+                    if not (IS_SPOKE and target_rel.replace('\\', '/').startswith(("canons/ecosystems/", "canons/micro/", "canons/local/"))):
                         line_no = find_line_num(content, match.group(0))
                         res.add_error("GHOST", f"Ghost path reference: `{target_rel}`", f"{rel_path}:{line_no}")
 
@@ -1961,7 +1984,7 @@ def check_doc_metrics_sync(res: AuditResult, verbose: bool = True):
         ]),
         ("README.md", [
             (re.compile(r'\b11\s+behavioral\s+laws\b', re.IGNORECASE), f"Claim '11 behavioral laws' is stale; actual is {actual_rules}"),
-            (re.compile(r'\b13\s+behavioral\s+laws\b', re.IGNORECASE), f"Claim '13 behavioral laws' is stale; actual is {actual_rules}"),
+            (re.compile(r'\b12\s+behavioral\s+laws\b', re.IGNORECASE), f"Claim '12 behavioral laws' is stale; actual is {actual_rules}"),
             (re.compile(r'\b31\s+Domain\s+Skills\b', re.IGNORECASE), f"Claim '31 Domain Skills' is stale; actual is {actual_public_skills}"),
         ]),
     ]
@@ -2053,10 +2076,17 @@ def check_operational_ergonomics(res: AuditResult, verbose: bool = True):
         except Exception as _e:
             _log_telemetry(_e, "verify_agents:readme_shell_check")
 
-    # 3. Progressive Disclosure Architecture Mandate
+    # 3. Progressive Disclosure Architecture Mandate (follows @AGENTS.md thin adapter if present)
     target_instruction = os.path.join(workspace_root, "GEMINI.md")
+    agents_instruction = os.path.join(workspace_root, "AGENTS.md")
     if not os.path.exists(target_instruction):
-        target_instruction = os.path.join(workspace_root, "AGENTS.md")
+        target_instruction = agents_instruction
+    elif os.path.exists(agents_instruction):
+        try:
+            if "@AGENTS.md" in read_text(target_instruction):
+                target_instruction = agents_instruction
+        except Exception:
+            target_instruction = agents_instruction
     if os.path.exists(target_instruction):
         try:
             guardrails_text = read_text(target_instruction)
@@ -2160,7 +2190,7 @@ def check_cross_artifact_contradictions(res: AuditResult, verbose: bool = True):
         },
         "reflexion": {
             "record", "list", "graduate", "detect-recurring", "consolidate", "status",
-            "audit", "reflect", "observe", "observations", "resolve", "habits", "linkify",
+            "audit", "reflect", "observe", "observations", "resolve", "habits", "skill-doctor", "linkify",
             "session", "milestone", "epoch", "daily", "weekly", "monthly"
         },
         "harness": {"promote", "stage", "status", "audit", "serve", "lifecycle", "curate", "index", "record-tool"},
@@ -2175,7 +2205,7 @@ def check_cross_artifact_contradictions(res: AuditResult, verbose: bool = True):
         "slicer": {"init", "next", "done", "park", "auto-solve", "status", "slice", "fast-track"},
         "pulsar": {
             "record", "list", "graduate", "detect-recurring", "consolidate", "status",
-            "audit", "reflect", "observe", "observations", "resolve", "habits", "linkify",
+            "audit", "reflect", "observe", "observations", "resolve", "habits", "skill-doctor", "linkify",
             "session", "milestone", "epoch", "daily", "weekly", "monthly"
         },
         "observatory": {"export", "second-brain", "clean"},

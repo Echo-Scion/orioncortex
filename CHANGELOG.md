@@ -8,6 +8,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 
 
+## [0.1.2] - 2026-11-08
+
+### Added
+- **5-Layer Anti-Truncation Security Guards**: Added `GUARD-INLINE-01` to detect and block Python self-truncation antipatterns (`open(w).write(...open(...))`) and `GUARD-INLINE-02` to intercept bulk inline write loops before file system mutation occurs.
+- **Zero-Destructive-One-Liner Invariant & Canonical Line Ending Protocol**: Mandated Git-native normalization (`git add --renormalize .` with `.gitattributes`) and prohibited destructive shell one-liners across all project rules.
+- **Stateless IDE Tab Resume & Live Git Working-Tree Anchoring**: Added automatic working-tree diff detection in `pre-agent-wake.py` and blank-handoff auto-pruning so IDE chat tabs remain disposable without manual session handoff ceremony.
+- **Diff-Locked Review Contract & 3-Round Anti-Loop Circuit Breaker**: Added diff-scoped anti-nitpick enforcement and a 3-round review circuit breaker in `worker.py` and `code-review` to prevent legacy-code false positives and infinite review loops.
+- **4-Tier Mechanical Correction Hierarchy & Skill Doctor CLI**: Added durability ranking (`classify_correction_hierarchy`) prioritizing architectural, AST/lint, and test fixes above prose rules alongside the `skill-doctor` shim telemetry auditor.
+- **Context Delta Pass-Through & Watchdog Slot Fallback**: Added structured Context Delta JSONL synthesis (`_extract_context_delta`) and automated secondary-slot watchdog fallback across multi-role pipelines in `worker.py` to prevent multi-hop prompt bloat and transient slot timeouts.
+- **Span-Aware Second-Worker Context Windowing**: Added `_extract_span_window` in `worker.py` so role dispatches, lookahead pre-drafts, and surgical patches extract targeted AST/line windows (`--span`) instead of truncating at line 100.
+- **Docstring-Enriched Code GraphRAG Indexing**: Enhanced `generate_ast_summary` in `scanner.py` to index module and symbol docstrings into `pages_fts`, balancing code vs. Markdown retrieval in `brain sync`.
+- **Adaptive Second-Worker Auto-Solve Telemetry**: Added execution telemetry tracking across `bento auto-solve` pass and byte-snapshot rollback events.
+- **100% Connected Unified Knowledge Graph**: Indexed all 64 ecosystem canons (Android, Flutter, Python, React, Global, Micro) and core scripts in `AGENTS_INDEX.md`, closing isolated graph components and unifying 1,350 entities into a single 100% connected Giant Component.
+- **Structured Triplet Queue & Handoff Integration**: Added automated `.orion/working/triplet_queue.json` generation upon ingestion for seamless batch triplet extraction by cloud and local models.
+- **Two-Phase Hybrid Cognition Documentation**: Explicitly distinguished deterministic AST/FTS5 structural graph ingestion from LLM-assisted semantic triplet extraction in `README.md` and `docs/03-local_rag_brain.md`.
+- **Anti-Patchwork Duplicate Class Verification Gate**: Added deterministic AST class-duplication detection in mechanical repository audits to prevent redundant class definitions across core engine modules and command handlers.
+- **Full-File AST DNA Layer & Chimera Scanning**: Expanded 5-Tier DNA architectural analysis to parse complete source files without byte-ceiling truncation while isolating test harnesses from production tier enforcement.
+- **GraphRAG Multi-Pattern Link & Hub Indexing**: Added extraction for unbackticked workspace paths, relative Markdown links, and slash-skill references alongside dedicated `indexes` and `routes_to` hub predicates and PageRank damping (`0.15x`).
+
+### Changed
+- **Bento Ephemeral State Consolidation & Storage De-Sprawl**: Consolidated redundant task state mirrors upon queue completion and expanded `gc` to purge blank episodic handoffs and transient working logs.
+- **Stateless 5-Lens Swarm Review Canonicalization**: Standardized spec auditing terminology and CLI routing strictly on `review` and `swarm` subcommands with full `--spec` and `--rubric` argument support and removed deprecated legacy spec-audit aliases.
+- **Observation Ledger Single-Source Inheritance**: Consolidated observation ledger persistence and FTS5 synchronization into a single canonical implementation shared across memory and pulsar subsystems.
+- **Execution Lane Context & Multi-Alias Command Guard**: Propagated Bento task execution lane metadata into wake hooks and extended zero-trust command guarding across all shell tool aliases.
+
+### Fixed
+- **Antigravity 2.0 PreToolUse Hook Contract & Path Doubling**: Aligned hook argument extraction with `toolCall` payload schema, updated hook block decision to `deny`, and restored clean root-relative hook execution paths.
+- **SQL-Level Hub Damping & Louvain Modularity De-Biasing**: Applied `0.15x` hub damping directly in SQL `ORDER BY` during 2-hop Personalized PageRank and Louvain community detection, preventing `AGENTS_INDEX.md` index edges from starving code/domain relations.
+- **Active Context Null-Safety & 1-Hop Route Cache Preservation**: Fixed `NoneType` error in `rag.py` when `active_bento_task` is `null` and preserved 1-hop graph triplets and neighbor assets across `route_cache.json` hits.
+- **Orphaned AST Entity Cleanup & Skill Doctor Telemetry Query**: Purged stale `AST_Element` nodes on file re-ingestion and garbage collection, fixed `telemetry` (`event_type`) and `.sidecar.json` querying in `run_skill_doctor`, and filtered benign environment probe catches from `detect_and_graduate_recurring`.
+- **Pre-Push Release Gate Tag Locking & Offline Review Circuit Breaker Guard**: Locked empty `[Unreleased]` bypass in `_check_changelog_unreleased` strictly to tagged/dirty release states and prevented offline worker runs from incrementing review circuit breaker counters.
+- **Novel Replacement Line Verification & Unified RAG CLI Routing**: Enforced novel replacement-line presence and non-empty file checks during Bento patch verification, aligned Q&A footer contracts in `AGENTS.md`, and registered top-level `rag` and `rag query` CLI routing in `orion.py`.
+- **Auto-Solve Indentation Alignment & Failure Memory Recording**: Fixed 3-argument indentation alignment in `dispenser.py` during automated Second-Worker patching and recorded failed verification attempts upon byte-snapshot rollback.
+- **Spoke Subfolder Template Resolution & Thin Adapter Verification**: Preserved root project name resolution when hydrating subfolder rules during `foundation deploy` and updated progressive disclosure checks in `verify_agents.py` to follow `@AGENTS.md` thin adapters.
+- **Workspace-Scoped AST Symbol Cache Isolation**: Restricted `ast_symbol_cache` persistence in `scanner.py` strictly to workspace-relative files so external test directories never pollute local SQLite caches.
+- **Provenance-Scoped Graph Ingestion & Embedding Hydration**: Scoped relation cleanup by provenance (`EXTRACTED` vs `SEMANTIC`) so triplet injection preserves structural graph edges, and forced vector embedding generation when archival vectors are missing.
+- **Decision Ledger Table Fallback & Slicer Return Unpacking**: Added Markdown table fallback parsing for architectural decision ledgers and aligned task slicer decision recording with list return contracts.
+- **Worker Role Relay & Pre-Push Changelog Release Gate**: Connected multi-role worker pipeline outputs sequentially across stages and allowed tagged release verification when the active version section in the changelog is populated.
+
 ## [0.1.1] - 2026-11-07
 
 ### Added

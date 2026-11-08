@@ -1418,9 +1418,9 @@ def raw_ingest_main(argv=None):
 
 STRUCTURAL_RELATIONS = (
     "mentions", "imports", "defines", "defines_map",
-    "routes_to", "executes", "inherits", "related_to",
+    "routes_to", "indexes", "executes", "inherits", "related_to",
     "references", "contains", "depends_on", "uses", "calls",
-    "has_section", "enforces", "governs", "integrates", "rationale_why",
+    "has_section", "integrates", "rationale_why",
     "implements", "exports", "provides", "supports", "documents",
     "audits", "validates", "mitigates", "triggers", "produces", "requires",
     "targets", "configures", "manages", "wraps", "binds"
@@ -2165,8 +2165,16 @@ def ingest_file(filepath: str, autonomy_level="balanced", manifest=None, log_lin
         row = c.fetchone()
         if row:
             if row[0] == sha:
-                print(f"Skipping {filepath} (Already matches hash)")
-                return False
+                needs_vector = False
+                if embed:
+                    try:
+                        c.execute('SELECT 1 FROM archival_vectors WHERE id = ?', (target_path,))
+                        needs_vector = c.fetchone() is None
+                    except Exception:
+                        needs_vector = False
+                if not needs_vector:
+                    print(f"Skipping {filepath} (Already matches hash)")
+                    return False
             action_type = "EXTEND"
 
         # Autonomy Matrix Guard
@@ -2203,7 +2211,7 @@ def ingest_file(filepath: str, autonomy_level="balanced", manifest=None, log_lin
         fm_lines.append("---")
         fm_text = "\n".join(fm_lines)
         
-        pointer_body = f"\n> **Original Source**: `{filepath}`\n"
+        pointer_body = f"\n> **Original Source**: `{target_path}`\n"
         
         if ext.lower() in RAW_EXTS:
             try:
@@ -2294,7 +2302,7 @@ def ingest_file(filepath: str, autonomy_level="balanced", manifest=None, log_lin
         else:
             pointer_body += f"> *Content body excluded from Graph to prevent storage bloat.*\n"
         
-        log_entry = f"- [{updated_date}] [{action_type}] Ingested {filepath}\n"
+        log_entry = f"- [{updated_date}] [{action_type}] Ingested {target_path}\n"
         if log_lines is not None:
             log_lines.append(log_entry)
         else:
@@ -2327,51 +2335,70 @@ def ingest_file(filepath: str, autonomy_level="balanced", manifest=None, log_lin
                     INSERT INTO pages_fts (path, content) VALUES (?, ?)
                 ''', (target_path, fts_body))
                 
-                c.execute('DELETE FROM edges WHERE source_id = ?', (target_path,))
-                c.execute('DELETE FROM relations WHERE source_path = ? OR subject_id = ?', (target_path, target_path))
+                c.execute("DELETE FROM relations WHERE (source_path = ? OR subject_id = ?) AND provenance = 'EXTRACTED'", (target_path, target_path))
+                c.execute("DELETE FROM entities WHERE source_path = ? AND type = 'AST_Element'", (target_path,))
                 
                 # --- SQL-Backed WikiLinks & Markdown Relationship Extraction ---
                 if ext.lower() == '.md':
                     import re
                     text_no_code = re.sub(r'```.*?```', '', content_str, flags=re.DOTALL)
+                    c.execute('''
+                        INSERT OR IGNORE INTO nodes (id, type, name, source_path) 
+                        VALUES (?, ?, ?, ?)
+                    ''', (target_path, 'File', target_path, target_path))
                     pattern = r'\[\[(.*?)\]\]'
                     wiki_links = re.findall(pattern, text_no_code)
-                    if wiki_links:
+                    for link in wiki_links:
+                        parts = link.split('|')
+                        name = parts[0].strip()
+                        raw_rel = parts[1].strip() if len(parts) > 1 else "mentions"
+                        relation = raw_rel if re.match(r'^[A-Za-z0-9_-]{1,32}$', raw_rel) else "mentions"
                         c.execute('''
                             INSERT OR IGNORE INTO nodes (id, type, name, source_path) 
                             VALUES (?, ?, ?, ?)
-                        ''', (target_path, 'File', os.path.basename(target_path), target_path))
-                        for link in wiki_links:
-                            parts = link.split('|')
-                            name = parts[0].strip()
-                            raw_rel = parts[1].strip() if len(parts) > 1 else "mentions"
-                            # Enforce strict predicate whitelist to prevent second-order prompt injection
-                            if re.match(r'^[A-Za-z0-9_-]{1,32}$', raw_rel):
-                                relation = raw_rel
-                            else:
-                                relation = "mentions"
-                            c.execute('''
-                                INSERT OR IGNORE INTO nodes (id, type, name, source_path) 
-                                VALUES (?, ?, ?, ?)
-                            ''', (name, 'WikiNode', name, target_path))
-                            c.execute('''
-                                INSERT OR IGNORE INTO edges (source_id, target_id, relation, confidence, source_path)
-                                VALUES (?, ?, ?, 1.0, ?)
-                            ''', (target_path, name, relation, target_path))
+                        ''', (name, 'WikiNode', name, target_path))
+                        c.execute('''
+                            INSERT OR IGNORE INTO edges (source_id, target_id, relation, confidence, source_path)
+                            VALUES (?, ?, ?, 1.0, ?)
+                        ''', (target_path, name, relation, target_path))
 
-                    # Deterministic Cross-Document Link Extraction (Replacing self-referential MarkdownSection hierarchy)
-                    doc_refs = re.findall(r'`(\.agents/(?:rules|skills|canons)/[A-Za-z0-9_./-]+\.(?:md|json|py))`', text_no_code)
-                    for ref in set(doc_refs):
-                        if ref != target_path:
+                    # 1. All canonical .agents/... and context/... paths (with or without backticks)
+                    doc_refs = set(re.findall(
+                        r'(?<![A-Za-z0-9_./-])((?:\.agents|context)/[A-Za-z0-9_./-]+\.(?:md|json|py|yml|yaml))',
+                        text_no_code,
+                    ))
+                    # 2. Standard Markdown relative links [label](relative/path.md)
+                    cur_dir = os.path.dirname(target_path)
+                    for md_link in re.findall(r'\[[^\]]+\]\(([^)#\s]+\.(?:md|json|py|yml|yaml))\)', text_no_code):
+                        if not md_link.startswith(("http://", "https://", "mailto:", "file://")):
+                            norm_rel = md_link if md_link.startswith((".agents/", "context/")) else os.path.normpath(os.path.join(cur_dir, md_link)).replace("\\", "/")
+                            if os.path.exists(os.path.join(WORKSPACE_DIR, norm_rel)):
+                                doc_refs.add(norm_rel)
+                    is_index_hub = os.path.basename(target_path) in ("AGENTS_INDEX.md", "RULES_INDEX.md", "SCRIPTS.md")
+                    rel_pred = "indexes" if is_index_hub else ("routes_to" if os.path.basename(target_path) == "AGENTS.md" else "references")
+                    for ref in sorted(doc_refs):
+                        if ref != target_path and "{{" not in ref:
                             c.execute('''
                                 INSERT OR IGNORE INTO nodes (id, type, name, source_path)
                                 VALUES (?, ?, ?, ?)
-                            ''', (ref, 'Document', os.path.basename(ref), target_path))
+                            ''', (ref, 'Document', ref, target_path))
                             c.execute('''
                                 INSERT OR IGNORE INTO edges (source_id, target_id, relation, confidence, source_path)
-                                VALUES (?, ?, 'references', 1.0, ?)
-                            ''', (target_path, ref, target_path))
-                # --- Structural Triplets ---
+                                VALUES (?, ?, ?, 1.0, ?)
+                            ''', (target_path, ref, rel_pred, target_path))
+
+                    # 3. Slash-skill references (`/skill-name`) -> routes_to .agents/skills/<skill-name>/SKILL.md
+                    for sk_slug in set(re.findall(r'`/([a-z][a-z0-9-]+)`', text_no_code)):
+                        sk_target = f".agents/skills/{sk_slug}/SKILL.md"
+                        if sk_target != target_path and os.path.isfile(os.path.join(WORKSPACE_DIR, sk_target)):
+                            c.execute('''
+                                INSERT OR IGNORE INTO nodes (id, type, name, source_path)
+                                VALUES (?, ?, ?, ?)
+                            ''', (sk_target, 'Skill', sk_target, target_path))
+                            c.execute('''
+                                INSERT OR IGNORE INTO edges (source_id, target_id, relation, confidence, source_path)
+                                VALUES (?, ?, 'routes_to', 1.2, ?)
+                            ''', (target_path, sk_target, target_path))
                 if ext.lower() in RAW_EXTS and 'triplets' in locals() and triplets:
                     c.execute('''
                         INSERT OR IGNORE INTO nodes (id, type, name, source_path) 
@@ -2445,8 +2472,8 @@ def ingest_file(filepath: str, autonomy_level="balanced", manifest=None, log_lin
             layer_key = "raw"
             
         manifest_entry = {
-            "filepath": filepath.replace("\\", "/"),
-            "orion_file": filepath.replace("\\", "/"),
+            "filepath": target_path,
+            "orion_file": target_path,
             "sha256": sha,
             "category": category,
             "updated": updated_date
@@ -2596,7 +2623,7 @@ def get_smart_ignore_dirs(target_path):
     ignores = {
         ".git", ".orion", "__pycache__", "node_modules", "build", "dist", "out", "bin",
         ".dart_tool", ".idea", ".vscode", ".gradle", "target", "venv", "env", "archive",
-        "docs", "templates", "tests", "evals", "scratch", ".scratch", "test", ".gemini",
+        "templates", "tests", "evals", "scratch", ".scratch", "test", ".gemini",
         ".antigravity-plugin", "coverage", ".pytest_cache"
     }
     if os.path.isfile(target_path):
@@ -2823,6 +2850,21 @@ def ingest_main(paths, autonomy, embed=False):
                         rel_target = os.path.relpath(target, WORKSPACE_DIR).replace("\\", "/")
                         rel_orig = os.path.relpath(orig, WORKSPACE_DIR).replace("\\", "/")
                         print(f"{i}. {rel_target} (source: {rel_orig})")
+                    queue_file = os.path.join(WORKSPACE_DIR, ".orion", "working", "triplet_queue.json")
+                    try:
+                        queue_data = {
+                            "status": "pending_llm_extraction",
+                            "pending_count": len(pending_files),
+                            "instructions": "Extract 3-5 knowledge triplets ([{'s': ..., 'p': ..., 'o': ..., 'src': ...}]) per file and inject via: python .agents/scripts/orion.py brain inject_triplets <triplets.json>",
+                            "files": [
+                                {"target": os.path.relpath(t, WORKSPACE_DIR).replace("\\", "/"), "source": os.path.relpath(o, WORKSPACE_DIR).replace("\\", "/")}
+                                for o, t in pending_files
+                            ]
+                        }
+                        atomic_write_text(queue_file, json.dumps(queue_data, indent=2))
+                        print(f"[QUEUE] Structured triplet queue active at: .orion/working/triplet_queue.json ({len(pending_files)} pending)")
+                    except Exception as _qe:
+                        _log_telemetry(_qe, "brain.py:save_triplet_queue")
                     print("[ACTION] Read each source file, extract 3-5 triplets, save as JSON list to `.orion/scratch/triplets.json` (`s`, `p`, `o`, `src`),")
                     print("then run: python .agents/scripts/orion.py brain inject_triplets .orion/scratch/triplets.json")
                 
@@ -2907,28 +2949,33 @@ def get_file_summary(filepath):
         print(f"[DEBUG DB] get_file_summary: {e}", file=sys.stderr)
     return "Not ingested."
 
-def find_backlinks(target_name):
+def find_backlinks(target_file: str):
     backlinks = []
     try:
         conn = get_db()
         c = conn.cursor()
-        # Query canonical relations first
+        norm_target = target_file.replace("\\", "/")
+        target_bname = os.path.basename(norm_target)
+        target_stem = os.path.splitext(target_bname)[0]
+        candidates = {norm_target}
+        if target_bname.lower() != "skill.md":
+            candidates.add(target_bname)
+            candidates.add(target_stem)
+        elif "/skills/" in norm_target:
+            skill_slug = norm_target.split("/skills/", 1)[1].split("/", 1)[0]
+            candidates.add(skill_slug)
+            candidates.add(f"/{skill_slug}")
+
         c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='relations'")
         if c.fetchone():
-            c.execute('SELECT subject_id FROM relations WHERE object_id = ? OR object_id = ?', (target_name, f"{target_name}.md"))
-            for row in c.fetchall():
-                basename = os.path.basename(row[0]).replace('.md', '')
-                if basename not in backlinks and basename != target_name:
-                    backlinks.append(basename)
-
-        # Fallback/merge with legacy edges table if present
-        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='edges'")
-        if c.fetchone():
-            c.execute('SELECT source_id FROM edges WHERE target_id = ? OR target_id = ?', (target_name, f"{target_name}.md"))
-            for row in c.fetchall():
-                basename = os.path.basename(row[0]).replace('.md', '')
-                if basename not in backlinks and basename != target_name:
-                    backlinks.append(basename)
+            placeholders = ",".join("?" for _ in candidates)
+            c.execute(
+                f"SELECT DISTINCT subject_id FROM relations WHERE object_id IN ({placeholders})",
+                tuple(candidates),
+            )
+            for (subj,) in c.fetchall():
+                if subj and subj != norm_target and subj not in backlinks:
+                    backlinks.append(subj)
         conn.close()
     except Exception as e:
         _log_telemetry(e, "brain.py:find_backlinks")
@@ -2940,10 +2987,10 @@ def resolve_wiki(query):
         print(f" [ORION] No nodes found matching '{query}'.")
         return
 
-    print(f" [ORION GRAPH RESOLVER] Node: {os.path.basename(target_file)}")
+    norm = target_file.replace("\\", "/")
+    print(f" [ORION GRAPH RESOLVER] Node: {norm}")
     print("=" * 60)
     
-    norm = target_file.replace("\\", "/")
     if "skills/" in norm:
         try:
             parts = norm.split("skills/")[1].split("/")
@@ -2962,19 +3009,33 @@ def resolve_wiki(query):
     print(content[:1500] + ("\n...[TRUNCATED]" if len(content) > 1500 else ""))
     print("-" * 60)
     
-    links = extract_links(content)
+    links = extract_links(content) if norm.lower().endswith(".md") else []
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute(
+            "SELECT object_id, predicate FROM relations WHERE subject_id = ? OR source_path = ? LIMIT 25",
+            (norm, norm),
+        )
+        for obj_id, pred in c.fetchall():
+            if (obj_id, pred) not in links:
+                links.append((obj_id, pred))
+        conn.close()
+    except Exception as _le:
+        _log_telemetry(_le, "brain.py:resolve_wiki_forward_relations")
+
     if links:
         print(" FORWARD LINKS (Outbound):")
         for name, rel in links:
             linked_file = find_target_file(name)
-            summary = get_file_summary(linked_file) if linked_file else "Not ingested."
+            summary = get_file_summary(linked_file) if linked_file else "Concept / AST Target"
             print(f"  -> [[{name}]] ({rel}) : {summary}")
     else:
         print(" FORWARD LINKS: None.")
         
     print("-" * 60)
-    target_basename = os.path.basename(target_file).replace('.md', '')
-    backlinks = find_backlinks(target_basename)
+    target_basename = (norm.split("/skills/", 1)[1].split("/", 1)[0] if "/skills/" in norm and os.path.basename(norm).lower() == "skill.md" else os.path.basename(target_file).replace(".md", ""))
+    backlinks = find_backlinks(norm)
     
     if backlinks:
         print(" BACKLINKS (Inbound / Dependencies):")
@@ -3079,8 +3140,8 @@ def inject_triplets(json_data, exit_on_error: bool = True):
                 
         for src in unique_sources:
             try:
-                # Delete only relations originating from this source
-                c.execute('DELETE FROM relations WHERE source_path = ?', (src,))
+                # Delete only semantic triplets originating from this source; preserve structural/link edges
+                c.execute("DELETE FROM relations WHERE source_path = ? AND provenance = 'SEMANTIC'", (src,))
             except Exception as e:
                 print(f"[WARNING] Failed to clear stale relations for {src}: {e}")
         
@@ -3093,23 +3154,15 @@ def inject_triplets(json_data, exit_on_error: bool = True):
             desc = (t.get("desc") or t.get("description") or t.get("context") or "").strip()
             if sub and pred and obj:
                 c.execute(
-                    "INSERT OR IGNORE INTO entities (name, type, description, source_path) VALUES (?, 'Entity', ?, ?)",
-                    (sub, desc or sub, src),
-                )
-                if desc:
-                    c.execute("UPDATE entities SET description = ? WHERE name = ? AND (description = '' OR description = name)", (desc, sub))
-                c.execute(
-                    "INSERT OR IGNORE INTO entities (name, type, description, source_path) VALUES (?, 'Entity', ?, ?)",
-                    (obj, obj, src),
+                    "INSERT OR IGNORE INTO entities (name, type, description, source_path) VALUES (?, 'Concept', ?, ?)",
+                    (sub, desc, src),
                 )
                 c.execute(
-                    """
-                    INSERT INTO relations (subject_id, predicate, object_id, weight, provenance, source_path)
-                    VALUES (?, ?, ?, 1.0, 'EXTRACTED', ?)
-                    ON CONFLICT(subject_id, predicate, object_id) DO UPDATE SET
-                        weight = excluded.weight,
-                        source_path = excluded.source_path
-                    """,
+                    "INSERT OR IGNORE INTO entities (name, type, description, source_path) VALUES (?, 'Concept', ?, ?)",
+                    (obj, desc, src),
+                )
+                c.execute(
+                    "INSERT OR REPLACE INTO relations (subject_id, predicate, object_id, weight, provenance, source_path) VALUES (?, ?, ?, 1.5, 'SEMANTIC', ?)",
                     (sub, pred, obj, src),
                 )
                 count += 1
@@ -3129,6 +3182,12 @@ def inject_triplets(json_data, exit_on_error: bool = True):
         else:
             print(f"[SUCCESS] Injected {count} triplets into orion.db.")
             clear_cloud_handoff("EXTRACT_GRAPH_TRIPLETS")
+            tq_path = os.path.join(WORKSPACE_DIR, ".orion", "working", "triplet_queue.json")
+            if os.path.exists(tq_path):
+                try:
+                    os.remove(tq_path)
+                except OSError:
+                    pass
         
         # --- IDE-1: Contradiction Engine (In-Process) ---
         try:
@@ -3394,7 +3453,7 @@ def hydrate_semantic_facts(workspace_dir: str = WORKSPACE_DIR) -> int:
                     mlm.set_fact("session", clean_k, inv_val.strip()[:250])
                     hydrated_count += 1
 
-            # 2. Parse .agents/DECISIONS.md
+            # 2. Parse .agents/DECISIONS.md (supports both H3 blocks and canonical Markdown tables)
             decisions_path = os.path.join(workspace_dir, ".agents", "DECISIONS.md")
             if os.path.exists(decisions_path):
                 with open(decisions_path, "r", encoding="utf-8", errors="replace") as f:
@@ -3403,6 +3462,16 @@ def hydrate_semantic_facts(workspace_dir: str = WORKSPACE_DIR) -> int:
                 for d_id, d_title, d_ctx, d_choice in dec_blocks[-8:]:
                     val = f"{d_title.strip()}: {d_choice.strip() if d_choice else (d_ctx.strip() if d_ctx else '')}"
                     clean_k = f"decision:{d_id.strip().lower()}"
+                    mlm.set_fact("session", clean_k, val[:250])
+                    hydrated_count += 1
+                table_rows = re.findall(
+                    r"^\|\s*`(DEC-[^`]+)`\s*\|\s*`([^`]+)`\s*\|\s*([^|]+?)\s*\|\s*`([^`]+)`\s*\|\s*`([^`]+)`",
+                    d_text,
+                    re.MULTILINE,
+                )
+                for d_id, d_plan, d_topic, d_res, d_status in table_rows[-12:]:
+                    clean_k = f"decision:{d_id.strip().lower()}"
+                    val = f"[{d_plan.strip()}] {d_topic.strip()} -> {d_res.strip()} ({d_status.strip()})"
                     mlm.set_fact("session", clean_k, val[:250])
                     hydrated_count += 1
         finally:
@@ -3417,7 +3486,7 @@ def hydrate_main(argv=None):
     Unified All-in-One Workspace & Orion Cognitive Memory Hydration.
     Executes:
     1. Tier-1 Semantic Memory Auto-Hydration (VISION.md + DECISIONS.md)
-    2. Deep workspace ingestion (.agents, context) with optional --embed
+    2. Deep workspace ingestion (AGENTS.md, .agents, context) with optional --embed and --force
     3. Contradiction sweep & false-positive purge
     4. Louvain community clustering & centrality ranking
     5. Rule matrix compilation
@@ -3427,16 +3496,33 @@ def hydrate_main(argv=None):
     print(" 🧠 ORION COGNITIVE MEMORY & WORKSPACE HYDRATION ENGINE")
     print("="*60)
     embed = False
+    force = False
     if argv:
         embed = any(a in argv for a in ("--embed", "-e"))
+        force = any(a in argv for a in ("--force", "-f", "--all"))
 
     # 1. Hydrate Semantic Memory
     facts_count = hydrate_semantic_facts()
     print(f"\n[1/6] Hydrated {facts_count} Tier-1 semantic memory facts into multi_layer_memory.")
 
-    # 2. Full Ingest
-    print("\n[2/6] Ingesting .agents and context directories into graph...")
-    ingest_main([os.path.join(WORKSPACE_DIR, ".agents"), os.path.join(WORKSPACE_DIR, "context")], autonomy="balanced", embed=embed)
+    # 2. Full Ingest (including root Master BIOS AGENTS.md)
+    print("\n[2/6] Ingesting AGENTS.md, .agents, and context directories into graph...")
+    targets = [
+        p for p in (
+            os.path.join(WORKSPACE_DIR, "AGENTS.md"),
+            os.path.join(WORKSPACE_DIR, ".agents"),
+            os.path.join(WORKSPACE_DIR, "context"),
+        ) if os.path.exists(p)
+    ]
+    if force:
+        try:
+            conn = get_db()
+            conn.execute("UPDATE pages SET sha256 = ''")
+            conn.commit()
+            conn.close()
+        except Exception as _fe:
+            _log_telemetry(_fe, "brain.py:hydrate_force_reset")
+    ingest_main(targets, autonomy="balanced", embed=embed)
 
     # 3. Contradiction Sweep
     print("\n[3/6] Scanning and purging graph contradiction collisions...")
@@ -3568,18 +3654,80 @@ def gc_main(argv=None):
             except Exception as _led_err:
                 _log_telemetry(_led_err, f"brain.py:gc_legacy_dir:{led}")
 
-    # 3. Clean temporary files in .orion/working/
+    # 3. Clean temporary, lock, log, and blank skeleton handoff files in .orion/
     working_dir = os.path.join(ORION_DIR, "working")
+    ephemeral_working_names = {
+        ".auto_sync_lock", ".last_gc", ".last_sync_walk", ".active_sessions.json", "auto_sync_ingest.log"
+    }
     if os.path.exists(working_dir):
         for f in os.listdir(working_dir):
-            if f.endswith((".tmp", ".lock", ".bak")):
-                fp = os.path.join(working_dir, f)
+            fp = os.path.join(working_dir, f)
+            if not os.path.isfile(fp):
+                continue
+            should_del = f.endswith((".tmp", ".lock", ".bak")) or f in ephemeral_working_names
+            if not should_del and f == "handoff.md":
+                try:
+                    with open(fp, "r", encoding="utf-8", errors="ignore") as _hf:
+                        htxt = _hf.read()
+                    hbody = [ln.strip() for ln in htxt.splitlines() if ln.strip() and not ln.strip().startswith(("#", "<!--", "["))]
+                    if len(" ".join(hbody)) < 15:
+                        should_del = True
+                except Exception:
+                    pass
+            if should_del:
                 try:
                     reclaimed_bytes += os.path.getsize(fp)
                     os.remove(fp)
                     cleaned_items += 1
                 except Exception as e:
                     _log_telemetry(e, "brain.py:gc_working")
+
+    # 3a. Clean blank episodic handoffs and obsolete root/harness clutter in .orion/
+    episodic_dir = os.path.join(ORION_DIR, "episodic")
+    if os.path.exists(episodic_dir):
+        for f in os.listdir(episodic_dir):
+            fp = os.path.join(episodic_dir, f)
+            if not os.path.isfile(fp):
+                continue
+            should_del_ep = f == ".last_archived_mtime"
+            if not should_del_ep and f.endswith(".md"):
+                try:
+                    with open(fp, "r", encoding="utf-8", errors="ignore") as _ef:
+                        etxt = _ef.read()
+                    ebody = [ln.strip() for ln in etxt.splitlines() if ln.strip() and not ln.strip().startswith(("#", "<!--", "["))]
+                    if len(" ".join(ebody)) < 15:
+                        should_del_ep = True
+                except Exception:
+                    pass
+            if should_del_ep:
+                try:
+                    reclaimed_bytes += os.path.getsize(fp)
+                    os.remove(fp)
+                    cleaned_items += 1
+                except Exception:
+                    pass
+        try:
+            if not os.listdir(episodic_dir):
+                os.rmdir(episodic_dir)
+        except Exception:
+            pass
+
+    for extra_rel in ("_schema.md", "verify_ast_cache.json", os.path.join("harness", "requests"), os.path.join("harness", "sessions", "cli_session.json")):
+        extra_p = os.path.join(ORION_DIR, extra_rel)
+        if os.path.isfile(extra_p):
+            try:
+                reclaimed_bytes += os.path.getsize(extra_p)
+                os.remove(extra_p)
+                cleaned_items += 1
+            except Exception:
+                pass
+    for empty_cand in (os.path.join(ORION_DIR, "harness", "sessions"), os.path.join(ORION_DIR, "harness")):
+        if os.path.isdir(empty_cand):
+            try:
+                if not os.listdir(empty_cand):
+                    os.rmdir(empty_cand)
+            except Exception:
+                pass
 
     # 3b. Clean legacy root backup artifacts (*.bak)
     try:
@@ -3636,12 +3784,28 @@ def gc_main(argv=None):
                 cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ast_symbol_cache'")
                 if cur.fetchone():
                     cur.execute("SELECT filepath FROM ast_symbol_cache")
-                    stale_paths = [r[0] for r in cur.fetchall() if not os.path.exists(r[0])]
+                    stale_paths = [
+                        r[0] for r in cur.fetchall()
+                        if not os.path.exists(r[0] if os.path.isabs(r[0]) else os.path.join(workspace_dir, r[0]))
+                    ]
                     for sp in stale_paths:
                         cur.execute("DELETE FROM ast_symbol_cache WHERE filepath = ?", (sp,))
                         cleaned_items += 1
             except Exception as _ae:
                 _log_telemetry(_ae, "brain.py:gc_ast_cache")
+
+            # Evict orphaned AST_Element entities with zero remaining relations
+            try:
+                cur.execute("""
+                    DELETE FROM entities
+                    WHERE type = 'AST_Element'
+                      AND name NOT IN (SELECT subject_id FROM relations)
+                      AND name NOT IN (SELECT object_id FROM relations)
+                """)
+                if cur.rowcount and cur.rowcount > 0:
+                    cleaned_items += cur.rowcount
+            except Exception as _oe:
+                _log_telemetry(_oe, "brain.py:gc_orphan_entities")
 
             conn.commit()
 

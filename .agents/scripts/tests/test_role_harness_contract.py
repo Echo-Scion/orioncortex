@@ -1,6 +1,7 @@
 import unittest
 import sys
 import os
+import json
 from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1]
@@ -70,6 +71,21 @@ class RoleHarnessContractTests(unittest.TestCase):
     def test_worker_status_includes_council_model(self):
         status = get_worker_status()
         self.assertIn("api_council", status["models"])
+
+    def test_context_delta_passthrough_and_review_cli_args(self):
+        from commands.worker import _extract_context_delta
+        delta_json, compact_pass = _extract_context_delta(
+            "explorer",
+            "# Report\n- Found symbol `connect_sqlite` at L45\n- Verified WAL mode",
+            target_file="core/db.py",
+            span="L40-L80",
+            artifact_rel=".orion/working/delegations/result-role-explorer.md",
+        )
+        parsed = json.loads(delta_json)
+        self.assertEqual(parsed["role"], "explorer")
+        self.assertEqual(parsed["target_file"], "core/db.py")
+        self.assertEqual(parsed["ast_span"], "[L40-L80]")
+        self.assertIn("Role `explorer` Delta", compact_pass)
 
 
 if __name__ == "__main__":

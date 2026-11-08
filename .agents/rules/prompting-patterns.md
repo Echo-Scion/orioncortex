@@ -2,7 +2,7 @@
 description: Advanced prompting patterns for sub-agent orchestration and determinism.
 activation: agent_delegation
 
-version: 0.1.1
+version: 0.1.2
 last_updated: 2026-09-26
 ---
 # Advanced Prompting Patterns (For Sub-Agent Orchestration)

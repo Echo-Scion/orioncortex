@@ -8,7 +8,9 @@ description: >-
 
 Before accepting or approving code changes (`git diff --name-only HEAD`), perform a check on each modified file based on the following criteria. Maintain the Lessword protocol: terse, direct, zero throat-clearing.
 
-## 0. Scope Mode & UI Single-System Order (`3_ui` Diffs)
+## 0. Scope Mode, Diff-Locked Anti-Nitpick Contract & 3-Round Cap
+- **Diff-Locked Boundary (Zero Legacy Nitpicks)**: Evaluate ONLY lines, signatures, and 1-hop boundaries modified in the active `git diff` or proposal. NEVER flag or nitpick pre-existing untouched legacy code outside the changed lines, and group related findings by bug class rather than repeating line-by-line nitpicks.
+- **3-Round Review Circuit Breaker**: Automated review-fix loops (`orion.py worker review`) are capped at **3 rounds** per target (`Exit Code 3` on Round 4). If gaps persist after 3 rounds, stop looping and escalate architectural trade-offs to the human author.
 - **Mode Resolution**: Default to `full` (max **15** findings across all states including empty/loading/error/narrow-width) unless `quick` (max **5** `HIGH`/`MEDIUM` findings on primary path) is specified.
 - **Single-System UI Priority Order**: For `3_ui` files, evaluate in strict sequence so foundational failures are never masked by polish: **1. Accessibility -> 2. Layout -> 3. Writing -> 4. Typography -> 5. UI Polish**. Assign overlapping issues to the foundational owner and cite `path/to/file:line`.
 

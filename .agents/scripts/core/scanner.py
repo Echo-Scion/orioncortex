@@ -1240,24 +1240,34 @@ def extract_python_edges_ast(content: str, file_basename: str) -> List[Tuple[str
     """Extracts structural AST triplets and # WHY: / # NOTE: rationale nodes in a single pass."""
     import ast as _ast
     triplets: List[Tuple[str, str, str]] = []
+    stdlib_names = getattr(sys, "stdlib_module_names", set()) | {
+        "os", "sys", "re", "json", "time", "math", "shutil", "glob", "uuid",
+        "pathlib", "typing", "datetime", "collections", "subprocess", "argparse",
+        "hashlib", "sqlite3", "tempfile", "unittest", "functools", "itertools", "ast",
+    }
+    generic_funcs = {"main", "__init__", "setUp", "tearDown", "print_help"}
     try:
         tree = _ast.parse(content)
         for node in _ast.walk(tree):
             if isinstance(node, _ast.Import):
                 for alias in node.names:
-                    triplets.append((file_basename, "imports", alias.name))
+                    root_mod = alias.name.split(".")[0]
+                    if root_mod not in stdlib_names:
+                        triplets.append((file_basename, "imports", alias.name))
             elif isinstance(node, _ast.ImportFrom) and node.module:
-                triplets.append((file_basename, "imports", node.module))
+                root_mod = node.module.split(".")[0]
+                if root_mod not in stdlib_names:
+                    triplets.append((file_basename, "imports", node.module))
             elif isinstance(node, _ast.ClassDef):
                 triplets.append((file_basename, "defines", node.name))
                 for base in node.bases:
-                    if isinstance(base, _ast.Name):
+                    if isinstance(base, _ast.Name) and base.id not in ("object", "TestCase", "Exception"):
                         triplets.append((node.name, "inherits", base.id))
             elif isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
-                triplets.append((file_basename, "defines", node.name))
+                fn_label = f"{file_basename}::{node.name}" if node.name in generic_funcs else node.name
+                triplets.append((file_basename, "defines", fn_label))
     except Exception as _e:
         _log_telemetry(_e, f"extract_python_edges_ast:{file_basename}")
-
     # Extract Rationale comments (# WHY:, # NOTE:, // WHY:)
     for match in re.finditer(r'(?:#|//)\s*(WHY|NOTE|ADR-\d+)\s*:\s*(.+)', content):
         tag, rationale_text = match.group(1), match.group(2).strip()[:120]
@@ -1267,12 +1277,29 @@ def extract_python_edges_ast(content: str, file_basename: str) -> List[Tuple[str
 
 
 def generate_ast_summary(filepath: str, content: Optional[str] = None) -> str:
-    """Unified single-pass AST skeleton summary generator."""
+    """Unified single-pass AST skeleton summary generator with docstring semantic enrichment."""
     header = f"--- AST Summary for {os.path.basename(filepath)} ---\n"
+    doc_lines: List[str] = []
+    if filepath.endswith(".py"):
+        try:
+            raw_src = content if content is not None else Path(filepath).read_text(encoding="utf-8", errors="replace")
+            tree = ast.parse(raw_src, filename=filepath)
+            mod_doc = ast.get_docstring(tree)
+            if mod_doc:
+                doc_lines.append(f"Module Docstring: {' '.join(mod_doc.strip().splitlines()[:3])}")
+            for node in tree.body:
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    ndoc = ast.get_docstring(node)
+                    if ndoc:
+                        first_line = ndoc.strip().splitlines()[0][:140]
+                        doc_lines.append(f"  - {node.name}: {first_line}")
+        except Exception:
+            pass
+    doc_block = ("\n".join(doc_lines) + "\n\n") if doc_lines else ""
     skel = generate_skeleton(filepath, content=content)
     if skel:
-        return header + "\n".join(skel)
-    return header + "No structural elements found."
+        return header + doc_block + "\n".join(skel)
+    return header + doc_block + "No structural elements found."
 
 
 
@@ -1462,17 +1489,28 @@ def extract_file_symbols(file_path: str, conn: Optional[Any] = None) -> Tuple[Di
     Leverages SQLite ast_symbol_cache with (mtime_ns, size_b) invalidation for sub-15ms incremental lookups.
     Returns: (defines_dict: {sym_name: [(line_no, signature)]}, references_set: {ref_name})
     """
-    norm_path = os.path.abspath(file_path).replace("\\", "/")
+    abs_fp = os.path.abspath(file_path)
+    is_within_ws = False
+    try:
+        from core.paths import get_workspace_dir
+        ws_root = os.path.abspath(str(get_workspace_dir()))
+        if abs_fp.startswith(ws_root + os.sep):
+            norm_path = os.path.relpath(abs_fp, ws_root).replace("\\", "/")
+            is_within_ws = True
+        else:
+            norm_path = abs_fp.replace("\\", "/")
+    except Exception:
+        norm_path = abs_fp.replace("\\", "/")
     mtime_ns = 0
     size_b = 0
     cache_db_path = None
     close_conn = False
-    active_conn = conn
+    active_conn = conn if is_within_ws else None
 
     try:
         st = os.stat(file_path)
         mtime_ns, size_b = st.st_mtime_ns, st.st_size
-        if active_conn is None:
+        if active_conn is None and is_within_ws:
             try:
                 from core.paths import get_persistence_db_path
                 cache_db_path = str(get_persistence_db_path())
@@ -1678,7 +1716,7 @@ def extract_file_symbols(file_path: str, conn: Optional[Any] = None) -> Tuple[Di
         except Exception as _e:
             _log_telemetry(_e, f"extract_file_symbols_polyglot:{file_path}")
 
-    if mtime_ns > 0:
+    if mtime_ns > 0 and is_within_ws and not os.path.isabs(norm_path) and ":" not in norm_path:
         write_conn = None
         close_write = False
         if conn is not None and not _is_conn_read_only(conn):

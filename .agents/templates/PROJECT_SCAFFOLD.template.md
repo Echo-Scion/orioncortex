@@ -198,7 +198,7 @@ This document defines the naming convention and location for the 82 granular Saa
 >    ---
 >    ```
 > 5. **Bounded Merge Anchors**: Automated extraction engines MUST wrap content in:
->    `<!-- [FLUTTERIN:AUTO-INFERRED:START source="..." confidence="..."] -->` ... `<!-- [FLUTTERIN:AUTO-INFERRED:END] -->`
+>    `<!-- [ORION:AUTO-INFERRED:START source="..." confidence="..."] -->` ... `<!-- [ORION:AUTO-INFERRED:END] -->`
 >    to guarantee that manual developer edits outside the anchors are preserved across re-scans.
 
 ## 25-File Golden Ratio Canonical Registry (Default Topology)

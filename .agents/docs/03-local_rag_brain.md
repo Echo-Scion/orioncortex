@@ -85,6 +85,19 @@ ORDER BY rank LIMIT 10;
 
 ## Chapter 6: Relational Triplet Graph (Code Dependency Safety)
 
+Source files express structural and conceptual dependencies. During ingestion, the engine processes relationships across a calibrated two-phase hybrid pipeline:
+
+### 6.1. Two-Phase Hybrid Extraction (Deterministic vs. Cognitive)
+
+1. **Phase 1: Deterministic Structural Extraction (100% Local Stdlib)**:
+   - Evaluated automatically during `python .agents/scripts/orion.py brain ingest`.
+   - Uses Python `ast.parse` and regex to extract code imports, class inheritances, symbol definitions, markdown cross-references (`[[wikilink]]`, `[label](path)`), and JIT index routes (`indexes`, `routes_to`).
+   - 100% deterministic, zero external pip dependencies, executes in under 2 seconds across the entire workspace.
+2. **Phase 2: Cognitive Semantic Extraction (LLM-Assisted Hybrid)**:
+   - Extracts abstract conceptual relationships (`A mitigates B`, `X violates Y`).
+   - If an on-device local neural coprocessor (Ollama model >= 6.5B) is active, extraction runs locally via `mine-triplets-worker`.
+   - If local AI is offline, Orion enqueues the pending files into `.orion/working/triplet_queue.json` and `.orion/working/cloud_handoff_queue.json`. Frontier Cloud Agents can then extract the triplets in batches and inject them via `python .agents/scripts/orion.py brain inject_triplets <triplets.json>`.
+
 Source files express structural dependencies. During ingestion, the engine extracts semantic triplets `(Subject, Predicate, Object)`:
 
 ```json

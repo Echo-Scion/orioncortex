@@ -220,6 +220,24 @@ DESTRUCTIVE_RE = re.compile(
     re.IGNORECASE,
 )
 
+INLINE_TRUNCATE_RE = re.compile(
+    r"\bopen\s*\(.+?,\s*['\"][wa+][b+]*['\"].*?\)\s*\.write\s*\([^)]*?\bopen\s*\(",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def is_bulk_inline_write(cmd_line: str) -> bool:
+    """Detect python -c commands combining directory iteration with file writing/deletion."""
+    if not re.search(r"\b(?:python(?:\.exe|\d+(?:\.\d+)?)?|py)\b.*?\s-c\s+", cmd_line, re.IGNORECASE):
+        return False
+    has_iter = bool(re.search(r"\b(?:os\.walk|os\.scandir|glob\.glob|Path\([^)]*\)\.(?:r?glob))\b", cmd_line, re.IGNORECASE))
+    has_write = bool(re.search(
+        r"\b(?:open\s*\(.+?,\s*['\"][wa+][b+]*['\"]|\.write_(?:bytes|text)\s*\(|os\.(?:remove|unlink)\s*\()",
+        cmd_line,
+        re.IGNORECASE | re.DOTALL,
+    ))
+    return has_iter and has_write
+
 
 def is_destructive_deletion(cmd_line: str) -> bool:
     """Detect destructive deletion commands targeting root, home, or drive root."""
@@ -505,6 +523,23 @@ def evaluate_command_guard(cmd_line: str, workspace_dir: Optional[str] = None) -
         return (
             "block",
             "GUARD-DEL-01: Destructive recursive deletion targeting root, home, or drive root."
+        )
+
+    # 2.5. GUARD-INLINE-01 & GUARD-INLINE-02: Destructive inline file write & truncation antipatterns
+    if INLINE_TRUNCATE_RE.search(cmd_line):
+        return (
+            "block",
+            "GUARD-INLINE-01: Lethal file self-truncation antipattern detected "
+            "(open(path, 'w*').write(...open(...))). Python evaluates the write target before reading, "
+            "truncating files to 0 bytes. Use separate read-then-atomic-write buffers in .scratch/ scripts."
+        )
+
+    if is_bulk_inline_write(cmd_line):
+        return (
+            "block",
+            "GUARD-INLINE-02: Destructive bulk file modification via inline python -c detected. "
+            "Batch directory writes and deletions must use dedicated scripts in .scratch/ with atomic safety "
+            "or native IDE editing tools per AGENTS.md §1 Core Guardrails."
         )
 
     # 3. ANTI-HANG GUARD: Empty regex pattern in rg/grep/findstr
@@ -2122,7 +2157,13 @@ class SecurityAuditor:
             return all_active, all_suppressed
 
         for root, dirs, files in os.walk(target_dir):
-            dirs[:] = [d for d in dirs if d not in exclude_dirs and not d.startswith('.git')]
+            dirs[:] = [
+                d for d in dirs
+                if d not in exclude_dirs
+                and not d.startswith('.git')
+                and not os.path.islink(os.path.join(root, d))
+                and not (hasattr(os.path, 'isjunction') and os.path.isjunction(os.path.join(root, d)))
+            ]
             for file in files:
                 if file.endswith(valid_exts):
                     fp = os.path.join(root, file)

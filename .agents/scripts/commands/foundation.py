@@ -186,7 +186,8 @@ def prune_unmatched_canons(target_agents_dir, active_framework):
 def prune_legacy_workflows(target_agents_dir):
     """
     Prunes deprecated standalone .agents/workflows/*.md files from spoke projects
-    now that workflows have fully graduated to skills. Preserves user task directories.
+    now that workflows have fully graduated to skills. Migrates any lingering legacy tasks
+    to .orion/working/tasks/ and purges .agents/workflows completely.
     """
     target_root = os.path.dirname(os.path.abspath(target_agents_dir))
     if _is_foundation_hub_repo(target_root):
@@ -195,6 +196,7 @@ def prune_legacy_workflows(target_agents_dir):
     if not os.path.isdir(workflows_dir):
         return
     pruned = 0
+    # 1. Prune legacy workflow markdown playbooks
     for item in os.listdir(workflows_dir):
         fpath = os.path.join(workflows_dir, item)
         if os.path.isfile(fpath) and item.endswith(".md"):
@@ -203,14 +205,44 @@ def prune_legacy_workflows(target_agents_dir):
                 pruned += 1
             except Exception as e:
                 _log_telemetry(e, f"prune_legacy_workflows:{item}")
-    if pruned > 0:
-        print(f"  -> Pruned {pruned} deprecated workflow files from .agents/workflows/ (graduated to skills)")
+
+    # 2. Check tasks/ subdirectory: migrate user tasks to .orion/working/tasks/ if present, then remove
+    tasks_dir = os.path.join(workflows_dir, "tasks")
+    if os.path.isdir(tasks_dir):
+        task_items = os.listdir(tasks_dir)
+        orion_tasks_dir = os.path.join(target_root, ".orion", "working", "tasks")
+        for ti in task_items:
+            tpath = os.path.join(tasks_dir, ti)
+            if ti == ".gitkeep":
+                try:
+                    os.remove(tpath)
+                except Exception:
+                    pass
+            elif os.path.isfile(tpath):
+                try:
+                    os.makedirs(orion_tasks_dir, exist_ok=True)
+                    dest_tpath = os.path.join(orion_tasks_dir, ti)
+                    if not os.path.exists(dest_tpath):
+                        shutil.move(tpath, dest_tpath)
+                        print(f"  -> Migrated legacy task {ti} to .orion/working/tasks/")
+                    else:
+                        os.remove(tpath)
+                except Exception as _mte:
+                    _log_telemetry(_mte, f"prune_legacy_workflows:migrate_task:{ti}")
         try:
-            if not os.listdir(workflows_dir):
-                os.rmdir(workflows_dir)
-                print("  -> Removed empty deprecated .agents/workflows/ directory")
+            if not os.listdir(tasks_dir):
+                os.rmdir(tasks_dir)
         except Exception:
             pass
+
+    if pruned > 0:
+        print(f"  -> Pruned {pruned} deprecated workflow files from .agents/workflows/ (graduated to skills)")
+    try:
+        if not os.listdir(workflows_dir):
+            os.rmdir(workflows_dir)
+            print("  -> Removed empty deprecated .agents/workflows/ directory")
+    except Exception:
+        pass
 
 def _read_python_deps(root: str) -> set[str]:
     """Extract normalized package dependencies from requirements.txt or pyproject.toml."""
@@ -764,10 +796,9 @@ def resolve_templates(target_dir, manifest, target_files=None):
     else:
         target_files = [os.path.join(target_dir, f) for f in target_files]
         
-    project_name = os.path.basename(os.path.abspath(target_dir))
-
-    # Pull target_dir context if present in manifest
+    # Pull target_dir context if present in manifest so subfolder calls preserve root project_name
     ctx_target_dir = manifest.get("_target_dir") or target_dir
+    project_name = manifest.get("project_name") or os.path.basename(os.path.abspath(ctx_target_dir))
     stack_vars = get_stack_defaults(manifest.get("framework"), manifest.get("language"), target_dir=ctx_target_dir)
     effective_manifest = dict(manifest)
     for k, v in stack_vars.items():
@@ -997,16 +1028,6 @@ def cmd_deploy(args):
     except Exception as _pe:
         _log_telemetry(_pe, "cmd_deploy:capabilities")
 
-    try:
-        from core.platform_manifests import is_flutterin_installed
-        fl_detected = is_flutterin_installed(target_dir)
-        if fl_detected:
-            print("  -> Reverse-Engineering: Flutterin suite detected on system (Auto-linking MCP bridge)")
-        else:
-            print("  -> Reverse-Engineering: Flutterin not detected (Lean mode, optional external suite)")
-    except Exception as _fe:
-        _log_telemetry(_fe, "cmd_deploy:flutterin_check")
-    
     if args.dry_run:
         print(f"[DRY RUN] Deploying Foundation to: {target_dir}")
         print(f"[DRY RUN] Framework: {framework}, Language: {language}")
@@ -1130,7 +1151,7 @@ def cmd_deploy(args):
             if not args.dry_run:
                 if not is_same_target:
                     shutil.copytree(src, dest, dirs_exist_ok=True, ignore=deploy_ignore)
-                    resolve_templates(dest, manifest)
+                resolve_templates(dest, {**manifest, "_target_dir": target_dir})
             else:
                 print(f"  [SIMULATED] -> Copied & Resolved Templates for {folder}/")
 
@@ -1143,7 +1164,8 @@ def cmd_deploy(args):
         dest_root = os.path.join(target_agents_dir, root_file)
         if os.path.exists(src_root):
             if not args.dry_run:
-                shutil.copy2(src_root, dest_root)
+                if os.path.abspath(src_root) != os.path.abspath(dest_root):
+                    shutil.copy2(src_root, dest_root)
             else:
                 print(f"  [SIMULATED] -> Copied {root_file}")
 
@@ -1215,7 +1237,8 @@ def cmd_deploy(args):
                     dest_template = os.path.join(target_template_dir, template_name)
                     
                     if os.path.exists(src_template):
-                        shutil.copy2(src_template, dest_template)
+                        if os.path.abspath(src_template) != os.path.abspath(dest_template):
+                            shutil.copy2(src_template, dest_template)
                         resolve_templates(target_template_dir, manifest, target_files=[template_name])
             else:
                 print("    [WARNING] ai_brands.json not found. Skipping root AI config propagation.")
@@ -1236,7 +1259,6 @@ def cmd_deploy(args):
                     target_dir,
                     selected_ais=deployed_ais_list,
                     dry_run=args.dry_run,
-                    include_flutterin=getattr(args, "with_flutterin", None),
                 )
                 
         else:
@@ -1861,7 +1883,6 @@ def sync_ai_configs(
     target_root: str,
     selected_ais: list | None = None,
     dry_run: bool = False,
-    include_flutterin: bool | None = None,
 ):
     """
     Sync AI configuration files with latest foundation templates.
@@ -2019,7 +2040,6 @@ def sync_ai_configs(
                         target_root,
                         ai_name,
                         dry_run=dry_run,
-                        include_flutterin=include_flutterin,
                     )
 
             # 2. Claude Code settings hook
@@ -2126,7 +2146,6 @@ def cmd_sync_ai(args):
         args.target,
         selected_ais=selected_ais,
         dry_run=args.dry_run,
-        include_flutterin=getattr(args, "with_flutterin", None),
     )
 
 
@@ -2183,6 +2202,9 @@ OPTIONAL_ORION_FEATURES = [
 def _is_foundation_hub_repo(target_dir: str) -> bool:
     """Detects whether target_dir is the upstream orioncortex (_foundation) hub repository itself."""
     abs_root = os.path.abspath(target_dir)
+    # If explicitly linked via .foundation_path, it is a spoke, not the hub
+    if os.path.isfile(os.path.join(abs_root, ".agents", ".foundation_path")):
+        return False
     app_markers = [
         "package.json", "pubspec.yaml", "Cargo.toml", "go.mod",
         "pyproject.toml", "requirements.txt", "pom.xml", "build.gradle",
@@ -2193,7 +2215,9 @@ def _is_foundation_hub_repo(target_dir: str) -> bool:
     has_orion = os.path.isfile(os.path.join(abs_root, ".agents", "scripts", "orion.py"))
     has_core = os.path.isdir(os.path.join(abs_root, ".agents", "scripts", "core"))
     has_rules = os.path.isdir(os.path.join(abs_root, ".agents", "rules"))
-    return has_orion and has_core and has_rules
+    base_name = os.path.basename(abs_root).lower()
+    is_named_hub = base_name in ("_foundation", "orioncortex", "foundation")
+    return has_orion and has_core and has_rules and is_named_hub
 
 
 def _detect_ui_project(target_dir: str) -> bool:
@@ -2656,7 +2680,6 @@ def execute_setup_pipeline(
             dry_run=False,
             use_local_llm=has_local_gen,
             llm_params=llm_params,
-            with_flutterin=False,
         )
         try:
             cmd_deploy(deploy_ns)
@@ -2946,7 +2969,7 @@ def cmd_setup(args: argparse.Namespace) -> None:
     gpu_label = f" | GPU: {hw.get('gpu_name')} ({vram_val} GB VRAM)" if hw.get("gpu_name") else ""
 
     print("\n╔════════════════════════════════════════════════════════════════════════════╗")
-    print("║ 🧠 ORIONCORTEX — ORION UNIFIED SETUP & DOCTOR WIZARD (v0.1.1)              ║")
+    print("║ 🧠 ORIONCORTEX — ORION UNIFIED SETUP & DOCTOR WIZARD (v0.1.2)              ║")
     print("╚════════════════════════════════════════════════════════════════════════════╝")
 
     print("\n[1/4] 💻 LAPTOP & 4-PILLAR DEPENDENCY DIAGNOSTIC")
@@ -3558,16 +3581,6 @@ def cmd_evolve(args):
         atomic_write_text(dna_path, json.dumps(dna_data, indent=2))
         print(f"  -> Updated {dna_path} with archetype '{target_archetype}' (State: MUTATING)")
 
-    try:
-        from core.platform_manifests import is_flutterin_installed
-        if is_flutterin_installed(target_dir):
-            print("  -> Triggering flutterin context re-synthesis...")
-            setattr(args, "framework", dna_data.get("framework", "flutter"))
-            setattr(args, "language", dna_data.get("language", "dart"))
-            cmd_deploy(args)
-    except Exception as e:
-        _log_telemetry(e, "cmd_evolve:resynthesize")
-
     print(f"✔ Evolutionary Sync Complete! Target project archetype upgraded to '{target_archetype}'.")
 
 
@@ -3628,7 +3641,7 @@ def probe_local_ollama_for_vision(prompt: str, model: Optional[str] = None) -> O
 
     base_url = "http://127.0.0.1:11434"
     try:
-        req = urllib.request.Request(f"{base_url}/api/tags", headers={"User-Agent": "Orion/0.1.1"})
+        req = urllib.request.Request(f"{base_url}/api/tags", headers={"User-Agent": "Orion/0.1.2"})
         with urllib.request.urlopen(req, timeout=2.0) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             models = [m.get("name") for m in data.get("models", []) if m.get("name")]
@@ -3654,7 +3667,7 @@ def probe_local_ollama_for_vision(prompt: str, model: Optional[str] = None) -> O
         req = urllib.request.Request(
             f"{base_url}/api/generate",
             data=payload,
-            headers={"Content-Type": "application/json", "User-Agent": "Orion/0.1.1"}
+            headers={"Content-Type": "application/json", "User-Agent": "Orion/0.1.2"}
         )
         with urllib.request.urlopen(req, timeout=10.0) as resp:
             res_data = json.loads(resp.read().decode("utf-8"))
@@ -3985,7 +3998,7 @@ def _detect_test_command(root: str) -> Optional[List[str]]:
 
 
 def _check_changelog_unreleased(root: str) -> Tuple[bool, str]:
-    """Gate 5 helper: CHANGELOG.md must exist and have non-empty entries under [Unreleased]."""
+    """Gate 5 helper: CHANGELOG.md must exist and have entries under [Unreleased] or match current VERSION."""
     path = os.path.join(root, "CHANGELOG.md")
     if not os.path.exists(path):
         return False, "CHANGELOG.md not found"
@@ -3994,10 +4007,36 @@ def _check_changelog_unreleased(root: str) -> Tuple[bool, str]:
     m = re.search(r"^##\s*\[Unreleased\][^\n]*\n(.*?)(?=^##\s|\Z)", text, re.MULTILINE | re.DOTALL)
     if not m:
         return False, "CHANGELOG.md has no '## [Unreleased]' section"
-    if not re.search(r"^\s*[-*]\s+\S", m.group(1), re.MULTILINE):
-        return False, "'## [Unreleased]' has no entries"
-    return True, "ok"
-
+    if re.search(r"^\s*[-*]\s+\S", m.group(1), re.MULTILINE):
+        return True, "ok"
+    ver_file = os.path.join(root, "VERSION")
+    if os.path.isfile(ver_file):
+        try:
+            cur_ver = open(ver_file, encoding="utf-8").read().strip()
+            if cur_ver:
+                is_release_state = True
+                if os.path.isdir(os.path.join(root, ".git")):
+                    tag_chk = subprocess.run(
+                        ["git", "describe", "--exact-match", "--tags", "HEAD"],
+                        cwd=root, capture_output=True, text=True, encoding="utf-8", creationflags=_WINDOWLESS_FLAGS
+                    )
+                    diff_chk = subprocess.run(
+                        ["git", "status", "--porcelain", "VERSION", "CHANGELOG.md"],
+                        cwd=root, capture_output=True, text=True, encoding="utf-8", creationflags=_WINDOWLESS_FLAGS
+                    )
+                    exact_tag = tag_chk.stdout.strip().lstrip("v") if tag_chk.returncode == 0 else ""
+                    is_release_state = (exact_tag == cur_ver) or bool(diff_chk.stdout.strip())
+                if is_release_state:
+                    rel_m = re.search(
+                        rf"^##\s*\[{re.escape(cur_ver)}\][^\n]*\n(.*?)(?=^##\s|\Z)",
+                        text,
+                        re.MULTILINE | re.DOTALL,
+                    )
+                    if rel_m and re.search(r"^\s*[-*]\s+\S", rel_m.group(1), re.MULTILINE):
+                        return True, f"ok (released v{cur_ver})"
+        except OSError:
+            pass
+    return False, "'## [Unreleased]' has no entries"
 
 def cmd_project_push(args) -> bool:
     """Run 5 pre-push gates, then `git push`. Returns True only when every gate passes."""
@@ -4128,7 +4167,6 @@ def main():
     parser_deploy.add_argument("--dry-run", action="store_true", help="Simulate deployment without modifying files")
     parser_deploy.add_argument("--use-local-llm", action="store_true", help="Flag to indicate if using a local LLM")
     parser_deploy.add_argument("--llm-params", type=float, default=0.0, help="Parameter size of the local LLM in Billions (e.g., 8.0, 70.0)")
-    parser_deploy.add_argument("--with-flutterin", action="store_true", help="Include flutterin MCP server definitions in deployed manifests")
     parser_deploy.add_argument("--statement", type=str, default=None, help="Creator intent statement for context/VISION.md")
     parser_deploy.add_argument("--archetype", type=str, default=None, help="Aesthetic archetype to lock into DESIGN.md")
     parser_deploy.add_argument("--interactive", action="store_true", help="Prompt user for Greenfield project scope")
@@ -4162,7 +4200,6 @@ def main():
     parser_syncai.add_argument("--target", required=True, help="Target project root directory")
     parser_syncai.add_argument("--ai", help="Comma-separated list of AIs to sync")
     parser_syncai.add_argument("--dry-run", action="store_true", help="Simulate sync without modifying files")
-    parser_syncai.add_argument("--with-flutterin", action="store_true", help="Include flutterin MCP server definitions in deployed manifests")
 
     # DNA Manager (Living Genome, Epigenetic Mutation & Dependency Audit)
     parser_dna = subparsers.add_parser("dna", help="Universal Living Project DNA manager, brownfield sequencer & epigenetic mutation engine")

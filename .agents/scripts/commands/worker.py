@@ -1,7 +1,7 @@
 """
 Dual-Engine Second Worker Subsystem (Ollama + API Key Provider / OpenCode Go).
-Provides CLI management, status probing, 5-Lens Goldfish Swarm spec auditing,
-adaptive concurrency execution, and lookahead patch pre-drafting.
+Provides CLI management, status probing, stateless 5-Lens Swarm spec auditing,
+Context Delta pass-through pipelines, watchdog slot fallback, and lookahead pre-drafting.
 """
 
 import sys
@@ -29,7 +29,7 @@ from core.db import atomic_write_text, log_telemetry
 
 WORKSPACE_DIR = os.path.abspath(os.path.join(_scripts_dir, "..", ".."))
 
-GOLDFISH_LENSES: Dict[str, str] = {
+SWARM_LENSES: Dict[str, str] = {
     "simplicity-reuse": "Audit for YAGNI, over-engineering, speculative abstractions, and missed opportunities to reuse existing codebase helpers.",
     "comprehension": "Synthesize what the proposal changes and how it interacts with existing state. Flag any ambiguous or contradictory specifications.",
     "system-risks": "Probe across the Triad: Boundary/Malformed Input, Resource/Concurrency race conditions, and Silent Failures/Masked Fallbacks.",
@@ -38,7 +38,7 @@ GOLDFISH_LENSES: Dict[str, str] = {
 }
 
 # Multi-Model Harness Stratification per Lens
-GOLDFISH_LENS_MODEL_SLOT: Dict[str, Tuple[str, str]] = {
+SWARM_LENS_MODEL_SLOT: Dict[str, Tuple[str, str]] = {
     "simplicity-reuse": ("api_fast", "local_code"),
     "comprehension": ("api_smart", "local_heavy"),
     "system-risks": ("api_smart", "local_heavy"),
@@ -60,7 +60,7 @@ ROLE_HARNESS_MATRIX: Dict[str, Dict[str, Any]] = {
         "slot_api": "api_smart",
         "slot_local": "local_heavy",
         "turn_limit": 5,
-        "description": "Performs stateless 5-lens Goldfish Swarm audits across simplicity, comprehension, risks, readiness, and boundaries."
+        "description": "Performs stateless 5-Lens Swarm audits across simplicity, comprehension, risks, readiness, and boundaries."
     },
     "fixer": {
         "title": "Surgical Code Patcher & Pre-Drafter",
@@ -139,9 +139,10 @@ def classify_task_role(prompt: str) -> str:
         "orchestrator": ["orchestrate", "lifecycle", "workflow", "state machine", "full cycle", "pipeline", "end to end"],
     }
 
+    import re
     for role, kw_list in keywords.items():
         for kw in kw_list:
-            if kw in p_lower:
+            if re.search(rf"\b{re.escape(kw)}", p_lower):
                 scores[role] += 1
 
     sorted_roles = sorted(scores.items(), key=lambda x: -x[1])
@@ -154,8 +155,8 @@ def classify_task_role(prompt: str) -> str:
 
 
 def _resolve_lens_model(lens_name: str, backend_kind: str, default_model: str, models_map: Dict[str, str]) -> str:
-    """Selects the specialized model slot for a specific Goldfish lens to diversify adversarial review."""
-    api_slot, local_slot = GOLDFISH_LENS_MODEL_SLOT.get(lens_name, ("api_smart", "local_heavy"))
+    """Selects the specialized model slot for a specific 5-Lens Swarm lens to diversify adversarial review."""
+    api_slot, local_slot = SWARM_LENS_MODEL_SLOT.get(lens_name, ("api_smart", "local_heavy"))
     if backend_kind == "api":
         return models_map.get(api_slot, default_model)
     if backend_kind == "ollama":
@@ -263,7 +264,42 @@ def cmd_status() -> int:
     return 0
 
 
-def cmd_dispatch_role(role: str, prompt: str, target_file: Optional[str] = None) -> int:
+def _extract_span_window(abs_file: str, span: str = "", pad: int = 35, max_chars: int = 8000) -> str:
+    """Extracts a targeted line window around span (e.g. L100-L150 or symbol name) with fallback to head."""
+    import re
+    try:
+        with open(abs_file, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except Exception as e:
+        return f"[ERROR READING TARGET FILE: {e}]"
+
+    lines = content.splitlines()
+    total = len(lines)
+    start_l, end_l = 1, min(total, 120)
+    if span:
+        m = re.search(r"(?:Lines?|L)\s*(\d+)(?:\s*[-–—]\s*L?(\d+))?", span, re.IGNORECASE)
+        if m:
+            start_l = max(1, int(m.group(1)))
+            end_l = int(m.group(2)) if m.group(2) else min(total, start_l + 50)
+        elif abs_file.endswith(".py"):
+            try:
+                tree = ast.parse(content, filename=abs_file)
+                clean_sym = span.split("::")[-1].strip()
+                for node in ast.walk(tree):
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == clean_sym:
+                        start_l = node.lineno
+                        end_l = getattr(node, "end_lineno", start_l + 40)
+                        break
+            except Exception:
+                pass
+
+    s_idx = max(0, start_l - 1 - pad)
+    e_idx = min(total, end_l + pad)
+    window = "\n".join(lines[s_idx:e_idx])
+    return window[:max_chars]
+
+
+def cmd_dispatch_role(role: str, prompt: str, target_file: Optional[str] = None, span: str = "") -> int:
     """Executes a single role harness with specialized prompt, model, session tag, and turn limit."""
     if role not in ROLE_HARNESS_MATRIX:
         sys.stderr.write(f"[ERROR] Unknown role '{role}'. Available roles: {', '.join(ROLE_HARNESS_MATRIX.keys())}\n")
@@ -275,12 +311,12 @@ def cmd_dispatch_role(role: str, prompt: str, target_file: Optional[str] = None)
     assigned_model = _resolve_role_model(role, provider_kind, default_model, status["models"])
 
     file_ctx = ""
-    if target_file and os.path.isfile(target_file):
-        try:
-            with open(target_file, "r", encoding="utf-8", errors="ignore") as f:
-                file_ctx = f"\n\n[TARGET FILE CONTEXT: {os.path.basename(target_file)}]\n{f.read(8000)}"
-        except Exception as e:
-            file_ctx = f"\n\n[ERROR READING TARGET FILE: {e}]"
+    if target_file:
+        clean_tf = target_file.split("#")[0]
+        inferred_span = span or (target_file.split("#", 1)[1] if "#" in target_file else "")
+        if os.path.isfile(clean_tf):
+            win_txt = _extract_span_window(os.path.abspath(clean_tf), span=inferred_span, pad=35, max_chars=8000)
+            file_ctx = f"\n\n[TARGET FILE CONTEXT: {os.path.basename(clean_tf)} ({inferred_span or 'head'})]\n{win_txt}"
 
     full_prompt = f"""You are the [{role.upper()}] subagent ({r_meta['title']}).
 Role Mission: {r_meta['description']}
@@ -302,23 +338,46 @@ Provide your response in clean, concise, technical Markdown with zero conversati
         return 2
 
     print(f"[{role.upper()}] Dispatching to {provider_kind.upper()} ({assigned_model})...")
+    sys_msg = f"You are the {role.upper()} autonomous software engineering agent. Be rigorous, terse, and precise."
     res = generate_completion(
         prompt=full_prompt,
         model=assigned_model,
-        system_prompt=f"You are the {role.upper()} autonomous software engineering agent. Be rigorous, terse, and precise.",
+        system_prompt=sys_msg,
         timeout_sec=45.0,
         temperature=0.1,
         session_tag=f"role_{role}"
     )
 
+    # Watchdog Slot Fallback: if primary model times out or returns empty, try fast fallback slot before failing
+    if not res:
+        fb_slot = "api_fast" if provider_kind == "api" else "local_code"
+        fb_model = status["models"].get(fb_slot, default_model)
+        if fb_model and fb_model != assigned_model:
+            print(f"[{role.upper()}] [WATCHDOG FALLBACK] Primary '{assigned_model}' empty; retrying via '{fb_model}'...")
+            res = generate_completion(
+                prompt=full_prompt,
+                model=fb_model,
+                system_prompt=sys_msg,
+                timeout_sec=35.0,
+                temperature=0.1,
+                session_tag=f"role_{role}_fallback"
+            )
+
     if not res:
         sys.stderr.write(f"[ERROR] Generation returned empty on model '{assigned_model}'.\n")
         return 1
 
+    import time as _time
     out_dir = os.path.join(WORKSPACE_DIR, ".orion", "working", "delegations")
     os.makedirs(out_dir, exist_ok=True)
-    out_file = os.path.join(out_dir, f"role_{role}_{int(os.times().system)}.md")
-    atomic_write_text(out_file, res.strip())
+    out_file = os.path.join(out_dir, f"result-role-{role}-{int(_time.time())}.md")
+    rel_out = os.path.relpath(out_file, WORKSPACE_DIR).replace("\\", "/")
+    delta_line, compact_pass = _extract_context_delta(role, res.strip(), target_file=target_file, span=span, artifact_rel=rel_out)
+    persisted_body = res.strip()
+    if "```jsonl" not in persisted_body:
+        persisted_body += f"\n\n## Context Delta\n```jsonl\n{delta_line}\n```\n"
+    atomic_write_text(out_file, persisted_body)
+    _LAST_ROLE_OUTPUT[role] = compact_pass
 
     print(f"\n--- [{role.upper()} VERDICT] ---")
     print(res.strip())
@@ -326,12 +385,43 @@ Provide your response in clean, concise, technical Markdown with zero conversati
     return 0
 
 
-def cmd_auto_pipeline(prompt: str, target_file: Optional[str] = None) -> int:
-    """Classifies user intent and executes an automated sequential role pipeline."""
+_LAST_ROLE_OUTPUT: Dict[str, str] = {}
+
+
+def _extract_context_delta(
+    role: str,
+    raw_output: str,
+    target_file: Optional[str] = None,
+    span: str = "",
+    artifact_rel: str = "",
+) -> Tuple[str, str]:
+    """Extracts a compact Context Delta JSONL record and pass-through brief to prevent multi-hop prompt bloat."""
+    clean_tf = (target_file or "workspace").split("#")[0]
+    inferred_span = span or (target_file.split("#", 1)[1] if target_file and "#" in target_file else "L1-L100")
+    lines = [ln.strip() for ln in raw_output.splitlines() if ln.strip() and not ln.strip().startswith("#")]
+    recipe = " ".join(lines[:3])[:280] if lines else "Completed role inspection."
+    delta_obj = {
+        "role": role,
+        "target_file": clean_tf,
+        "ast_span": f"[{inferred_span}]",
+        "action_recipe": recipe,
+        "artifact": artifact_rel,
+    }
+    delta_json = json.dumps(delta_obj, ensure_ascii=False)
+    bullet_lines = [
+        ln for ln in raw_output.splitlines()
+        if ln.strip().startswith(("-", "*", "1.", "2.", "3.", "4.", "5.", "###"))
+    ][:14]
+    digest = "\n".join(bullet_lines)[:1200] if bullet_lines else raw_output[:1200]
+    compact_pass = f"- **Role `{role}` Delta** (`{artifact_rel or 'memory'}`): `{delta_json}`\n{digest}"
+    return delta_json, compact_pass
+
+
+def cmd_auto_pipeline(prompt: str, target_file: Optional[str] = None, span: str = "") -> int:
+    """Classifies user intent and executes an automated sequential role pipeline with Context Delta pass-through."""
     primary_role = classify_task_role(prompt)
     print(f"[ORION AUTO-ROUTER] Detected Primary Intent: `{primary_role}`")
 
-    # Define standard sequential pipelines based on primary intent
     pipeline = [primary_role]
     if primary_role in ("fixer", "coder"):
         pipeline = ["explorer", "oracle", "fixer", "councillor"] if target_file else ["oracle", "fixer", "councillor"]
@@ -342,22 +432,63 @@ def cmd_auto_pipeline(prompt: str, target_file: Optional[str] = None) -> int:
 
     print(f"[ORION AUTO-PIPELINE] Sequential execution plan: {' -> '.join(pipeline)}")
 
-    current_prompt = prompt
+    accumulated_deltas: List[str] = []
     for idx, step_role in enumerate(pipeline, 1):
         print(f"\n>>> [STEP {idx}/{len(pipeline)}] Running role `{step_role}`...")
-        ret = cmd_dispatch_role(step_role, current_prompt, target_file)
+        step_prompt = prompt
+        if accumulated_deltas:
+            step_prompt = f"{prompt}\n\n[PRIOR CONTEXT DELTAS (PASS-THROUGH)]\n" + "\n\n".join(accumulated_deltas)
+        ret = cmd_dispatch_role(step_role, step_prompt, target_file, span=span)
         if ret != 0:
             sys.stderr.write(f"[PIPELINE HALT] Step {step_role} failed with exit code {ret}.\n")
             return ret
+        if _LAST_ROLE_OUTPUT.get(step_role):
+            accumulated_deltas.append(_LAST_ROLE_OUTPUT[step_role])
 
     print(f"\n✅ [ORION AUTO-PIPELINE COMPLETE] All {len(pipeline)} steps finished successfully.")
     return 0
 
+MAX_REVIEW_ROUNDS = 3
+
+
+def _check_and_increment_review_round(target_key: str, reset: bool = False) -> Tuple[int, bool]:
+    """Tracks consecutive review passes per target in .orion/working/context.json to enforce the 3-Round Cap."""
+    ctx_path = os.path.join(WORKSPACE_DIR, ".orion", "working", "context.json")
+    data: Dict[str, Any] = {}
+    if os.path.isfile(ctx_path):
+        try:
+            with open(ctx_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            data = {}
+    rounds_map = data.get("review_rounds") if isinstance(data.get("review_rounds"), dict) else {}
+    norm_k = os.path.basename(target_key or "global_spec")
+    if reset:
+        rounds_map.pop(norm_k, None)
+        data["review_rounds"] = rounds_map
+        try:
+            atomic_write_text(ctx_path, json.dumps(data, indent=2))
+        except Exception:
+            pass
+        return 0, True
+    current_round = int(rounds_map.get(norm_k, 0)) + 1
+    rounds_map[norm_k] = current_round
+    data["review_rounds"] = rounds_map
+    try:
+        atomic_write_text(ctx_path, json.dumps(data, indent=2))
+    except Exception:
+        pass
+    return current_round, (current_round <= MAX_REVIEW_ROUNDS)
+
 
 def _run_single_lens(lens_name: str, lens_focus: str, spec_content: str, backend_kind: str, model_name: str) -> Dict[str, Any]:
-    """Evaluates a single Goldfish lens and returns structured status."""
-    prompt = f"""You are a Goldfish Subagent auditing a technical spec on the lens: [{lens_name}].
+    """Evaluates a single stateless Swarm lens with strict Diff-Locked Anti-Nitpick boundaries."""
+    prompt = f"""You are an Isolated Stateless Reviewer Subagent auditing a technical spec on the lens: [{lens_name}].
 Lens Goal: {lens_focus}
+DIFF-LOCKED ANTI-NITPICK CONTRACT:
+1. Evaluate ONLY changes, boundaries, and logic introduced in the active diff or proposed specification.
+2. NEVER flag or nitpick pre-existing untouched legacy code outside the modified lines.
+3. Group related defects by bug class rather than repeating line-by-line nitpicks.
 
 Evaluate the specification/plan below against this specific lens.
 Find up to 3 concrete findings or gaps. If no gaps exist, explicitly state: 'No gaps identified under this lens.'
@@ -403,9 +534,9 @@ Respond in clean Markdown:
     }
 
 
-def cmd_goldfish_audit(spec_path: str, rubric: str = "all") -> int:
+def cmd_swarm_audit(spec_path: str, rubric: str = "all") -> int:
     """
-    5-Lens Goldfish Swarm Audit:
+    Stateless 5-Lens Swarm Audit:
     Performs an isolated review of the target spec/plan across 5 parallel or sequential lenses
     without conversation history to prevent confirmation bias.
     """
@@ -424,9 +555,21 @@ def cmd_goldfish_audit(spec_path: str, rubric: str = "all") -> int:
     status_cfg = get_worker_status()
     models_map = status_cfg.get("models", {})
     backend_kind, model_name, max_workers = _select_worker_backend(prefer_smart=True)
-    selected_lenses = list(GOLDFISH_LENSES.keys()) if rubric == "all" else [r.strip() for r in rubric.split(",") if r.strip() in GOLDFISH_LENSES]
+    if backend_kind == "offline":
+        print("[OFFLINE/SKIPPED] 0/5 lenses executed (all workers offline).", file=sys.stderr)
+        return 2
 
-    print(f"[GOLDFISH] Dispatching 5-Lens Swarm Audit for `{os.path.basename(abs_spec)}` via {backend_kind.upper()} ({model_name}) with max_workers={max_workers}...")
+    round_num, within_cap = _check_and_increment_review_round(abs_spec)
+    if not within_cap:
+        sys.stderr.write(
+            f"[REVIEW CIRCUIT BREAKER] `{os.path.basename(abs_spec)}` exceeded {MAX_REVIEW_ROUNDS}/{MAX_REVIEW_ROUNDS} automated review rounds (Round {round_num}).\n"
+            "Step back and escalate architectural trade-offs to the human author instead of looping.\n"
+        )
+        return 3
+
+    selected_lenses = list(SWARM_LENSES.keys()) if rubric == "all" else [r.strip() for r in rubric.split(",") if r.strip() in SWARM_LENSES]
+
+    print(f"[SWARM REVIEW] Dispatching 5-Lens Swarm Audit for `{os.path.basename(abs_spec)}` via {backend_kind.upper()} ({model_name}) with max_workers={max_workers}...")
 
     results = []
     if max_workers > 1 and backend_kind == "api":
@@ -435,7 +578,7 @@ def cmd_goldfish_audit(spec_path: str, rubric: str = "all") -> int:
                 executor.submit(
                     _run_single_lens,
                     lname,
-                    GOLDFISH_LENSES[lname],
+                    SWARM_LENSES[lname],
                     spec_content,
                     backend_kind,
                     _resolve_lens_model(lname, backend_kind, model_name, models_map),
@@ -447,7 +590,7 @@ def cmd_goldfish_audit(spec_path: str, rubric: str = "all") -> int:
     else:
         for lname in selected_lenses:
             lens_model = _resolve_lens_model(lname, backend_kind, model_name, models_map)
-            results.append(_run_single_lens(lname, GOLDFISH_LENSES[lname], spec_content, backend_kind, lens_model))
+            results.append(_run_single_lens(lname, SWARM_LENSES[lname], spec_content, backend_kind, lens_model))
 
     # Maintain predictable lens ordering
     results.sort(key=lambda x: selected_lenses.index(x["lens"]) if x["lens"] in selected_lenses else 99)
@@ -458,7 +601,7 @@ def cmd_goldfish_audit(spec_path: str, rubric: str = "all") -> int:
         return 2
 
     report_lines = [
-        f"# 5-Lens Goldfish Swarm Audit Report",
+        f"# Stateless 5-Lens Swarm Audit Report",
         f"- **Spec File**: `{os.path.basename(abs_spec)}`",
         f"- **Backend**: `{backend_kind}` ({model_name})",
         f"- **Concurrency**: `{max_workers} workers`",
@@ -477,10 +620,10 @@ def cmd_goldfish_audit(spec_path: str, rubric: str = "all") -> int:
 
     out_dir = os.path.join(WORKSPACE_DIR, ".orion", "working", "delegations")
     os.makedirs(out_dir, exist_ok=True)
-    out_file = os.path.join(out_dir, "result-goldfish.md")
+    out_file = os.path.join(out_dir, "result-swarm-review.md")
     atomic_write_text(out_file, "\n".join(report_lines))
 
-    print(f"[SUCCESS] 5-Lens Goldfish Swarm Report written to: {out_file}")
+    print(f"[SUCCESS] 5-Lens Swarm Report written to: {out_file}")
     return 0
 
 
@@ -491,18 +634,16 @@ def cmd_pre_draft(target_file: str, span: str, goal: str, task_id: str) -> int:
         sys.stderr.write(f"[ERROR] Target file not found for pre-draft: {abs_file}\n")
         return 1
 
-    try:
-        with open(abs_file, "r", encoding="utf-8") as f:
-            content = f.read()
-    except Exception as e:
-        sys.stderr.write(f"[ERROR] Failed to read target file: {e}\n")
+    window_ctx = _extract_span_window(abs_file, span=span, pad=30, max_chars=4500)
+    if window_ctx.startswith("[ERROR READING TARGET FILE:"):
+        sys.stderr.write(f"{window_ctx}\n")
         return 1
 
     prompt = f"""Draft a surgical code block replacement for file `{os.path.basename(abs_file)}` over span `{span}`.
 Goal: {goal}
 
-Current File Context:
-{content[:4000]}
+Current File Context (Span `{span}`):
+{window_ctx}
 
 Respond ONLY in JSON matching format:
 {{
@@ -528,7 +669,8 @@ Respond ONLY in JSON matching format:
 
     if abs_file.endswith(".py") and code:
         try:
-            ast.parse(code)
+            import textwrap
+            ast.parse(textwrap.dedent(code))
         except Exception as e:
             sys.stderr.write(f"[WARNING] Lookahead pre-draft for task {task_id} failed AST parse check: {e}\n")
             return 1
@@ -555,18 +697,16 @@ def cmd_draft_patch(target_file: str, span: str, goal: str) -> int:
         sys.stderr.write(f"[ERROR] Target file not found: {abs_file}\n")
         return 1
 
-    try:
-        with open(abs_file, "r", encoding="utf-8") as f:
-            content = f.read()
-    except Exception as e:
-        sys.stderr.write(f"[ERROR] Failed to read target file: {e}\n")
+    window_ctx = _extract_span_window(abs_file, span=span, pad=30, max_chars=4500)
+    if window_ctx.startswith("[ERROR READING TARGET FILE:"):
+        sys.stderr.write(f"{window_ctx}\n")
         return 1
 
     prompt = f"""Draft a surgical code patch for file `{os.path.basename(abs_file)}` over span `{span}`.
 Goal: {goal}
 
-Current File Context:
-{content[:4000]}
+Current File Context (Span `{span}`):
+{window_ctx}
 
 Return JSON payload matching contract:
 {{
@@ -583,6 +723,13 @@ Return JSON payload matching contract:
         min_params_b=3.0,
     )
 
+    if payload is None or provider == "offline":
+        print(
+            f"[OFFLINE/SKIPPED] Draft patch queued to cloud_handoff_queue.json (provider='{provider}').",
+            file=sys.stderr,
+        )
+        return 2
+
     out_dir = os.path.join(WORKSPACE_DIR, ".orion", "working", "delegations")
     os.makedirs(out_dir, exist_ok=True)
     out_file = os.path.join(out_dir, f"draft_patch_{os.path.basename(abs_file)}.json")
@@ -598,11 +745,13 @@ def main(args: Optional[list] = None) -> int:
 
     subparsers.add_parser("status", help="Print Dual-Engine configuration and status")
 
-    gold_parser = subparsers.add_parser("goldfish", help="Run 5-Lens Goldfish Swarm Spec Audit")
-    gold_parser.add_argument("--spec", required=True, help="Path to specification/plan file")
-    gold_parser.add_argument("--rubric", default="all", help="Comma-separated rubric criteria or 'all'")
-
-    subparsers.add_parser("review", help="Alias for goldfish 5-Lens Swarm audit")
+    for sub_name, sub_help in (
+        ("review", "Run Stateless 5-Lens Swarm Spec Audit"),
+        ("swarm", "Alias for Stateless 5-Lens Swarm Spec Audit"),
+    ):
+        sp = subparsers.add_parser(sub_name, help=sub_help)
+        sp.add_argument("--spec", required=True, help="Path to specification/plan file")
+        sp.add_argument("--rubric", default="all", help="Comma-separated rubric criteria or 'all'")
 
     pre_parser = subparsers.add_parser("pre-draft", help="Pre-draft lookahead replacement code for task N+1")
     pre_parser.add_argument("--file", required=True, help="Target file path")
@@ -619,27 +768,29 @@ def main(args: Optional[list] = None) -> int:
     disp_parser.add_argument("--role", required=True, help="Target role (e.g. explorer, reviewer, fixer, oracle, councillor)")
     disp_parser.add_argument("--prompt", required=True, help="Task prompt or instruction")
     disp_parser.add_argument("--file", default=None, help="Optional target file path")
+    disp_parser.add_argument("--span", default="", help="Optional line or symbol span (e.g. L10-L50)")
 
     auto_parser = subparsers.add_parser("auto", help="Auto-classify intent and run multi-role autonomous pipeline")
     auto_parser.add_argument("prompt", help="Natural language engineering goal")
     auto_parser.add_argument("--file", default=None, help="Optional target file path")
+    auto_parser.add_argument("--span", default="", help="Optional line or symbol span (e.g. L10-L50)")
 
     parsed = parser.parse_args(args)
 
     if parsed.subcommand == "status" or not parsed.subcommand:
         return cmd_status()
-    elif parsed.subcommand in ("goldfish", "review"):
-        spec_path = getattr(parsed, "spec", "") or (args[1] if len(args) > 1 and not args[1].startswith("-") else "")
+    elif parsed.subcommand in ("review", "swarm"):
+        spec_path = getattr(parsed, "spec", "") or (args[1] if args and len(args) > 1 and not args[1].startswith("-") else "")
         rubric = getattr(parsed, "rubric", "all")
-        return cmd_goldfish_audit(spec_path, rubric)
+        return cmd_swarm_audit(spec_path, rubric)
     elif parsed.subcommand == "pre-draft":
         return cmd_pre_draft(parsed.file, parsed.span, parsed.goal, parsed.task_id)
     elif parsed.subcommand == "draft-patch":
         return cmd_draft_patch(parsed.file, parsed.span, parsed.goal)
     elif parsed.subcommand == "dispatch":
-        return cmd_dispatch_role(parsed.role, parsed.prompt, parsed.file)
+        return cmd_dispatch_role(parsed.role, parsed.prompt, parsed.file, span=getattr(parsed, "span", ""))
     elif parsed.subcommand == "auto":
-        return cmd_auto_pipeline(parsed.prompt, parsed.file)
+        return cmd_auto_pipeline(parsed.prompt, parsed.file, span=getattr(parsed, "span", ""))
 
     return 0
 

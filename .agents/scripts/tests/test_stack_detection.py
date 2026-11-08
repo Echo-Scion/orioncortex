@@ -58,7 +58,7 @@ class TestStackDetection(unittest.TestCase):
         self.assertIn("fastapi", deps)
         self.assertIn("uvicorn", deps)
 
-    def test_python_profile_scionlog_shape_headless(self):
+    def test_python_profile_cli_daemon_shape_headless(self):
         deps = {"ccxt", "sqlalchemy", "pydantic", "optuna", "redis"}
         profile = _python_profile(deps, has_ui=False)
         self.assertEqual(profile["frontend_framework"], "Headless / CLI / Daemon")

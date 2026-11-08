@@ -31,9 +31,9 @@ class TestUniversalPacker(unittest.TestCase):
             self.assertFalse(is_foundation_root("."))
         else:
             self.assertTrue(is_foundation_root("."))
-        # tools/flutterin is an application subproject
-        if os.path.exists("tools/flutterin"):
-            self.assertFalse(is_foundation_root("tools/flutterin"))
+        # tools/sub_app is an application subproject
+        if os.path.exists("tools/sub_app"):
+            self.assertFalse(is_foundation_root("tools/sub_app"))
 
     def test_classify_app_file(self):
         self.assertEqual(compute_file_gravity_and_cluster("bin/cli.mjs")[0], 8)

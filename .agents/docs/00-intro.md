@@ -1,5 +1,5 @@
 # AI Brain: Main Encyclopedia of the `.agents` & `.orion` Ecosystem
-# (OrionCortex Infrastructure v0.1.1)
+# (OrionCortex Infrastructure v0.1.2)
 
 > **Complete Technical Encyclopedia.** Every architectural pillar, deterministic guardrail, local RAG component, script cluster, and operational skill is documented with technical precision and exact code examples.
 
@@ -42,7 +42,7 @@ Rather than relying on ad-hoc prompts or bloated external frameworks, `.agents` 
 
 ### Core Architecture Highlights
 - **Four Anchored Pillars (Zero-Pip Floor)**: Runs out-of-the-box on pure Python 3.10+ standard library (`ast`, `re`, `sqlite3`, `hashlib`, `urllib`). Optional native accelerators unlock hardware performance and degrade gracefully when absent: Cargo Rust (`rtk` terminal proxy + `ast-grep` CST matcher), local neural coprocessors (`Ollama`, `llama-server`, `LM Studio`, `vLLM`), and the `Bun` static TypeScript/MCP runtime.
-- **Master BIOS & 33-Row JIT Knowledge Router (`AGENTS.md`)**: Dynamic Just-In-Time (JIT) skill and canon dispatch that loads only domain-relevant runbooks on demand, preventing prompt saturation and "Lost in the Middle" attention decay across 19 supported AI IDEs and CLIs.
+- **Master BIOS & 49-Row JIT Knowledge Router (`AGENTS.md`)**: Dynamic Just-In-Time (JIT) skill and canon dispatch that loads only domain-relevant runbooks on demand, preventing prompt saturation and "Lost in the Middle" attention decay across 19 supported AI IDEs and CLIs.
 - **Dual-Level GraphRAG & 3-Tier Observational Memory (`orion.db`)**: Combines SQLite3 WAL FTS5 Porter BM25 lexical search, packed `float32` vector embeddings, 1-hop entity-relation traversal, and pure-Python Louvain modularity community clustering. Raw session turns (`recall_turns`) compress into anchored observations (`[O1]`–`[On]`) and roll over into `memory_generations` via zero-LLM Shannon Surprisal scoring with `superseded_by` anti-flashback filtering.
 - **Sovereign Skill Harness & Code-As-Harness (`core/harness/`)**: In-tree implementation of the *Agent = Model + Execution Harness* architecture. Governs skill staging (`staging.py`), 17-gate admission promotion (`admission.py`), opportunity-relative lifecycle archival (`lifecycle.py`), prefix cluster curation (`curator.py`), quantum tool telemetry (`capture.py`), and programmatic synthesis of `is_legal_action` verification scripts (`engine.py`).
 - **Living Architectural DNA & Non-Destructive Mapping (`core/dna.py`)**: Sequences any repository into 6 architectural strata ($T_0 \to T_5$), maps brownfield folder naming conventions non-destructively via Epigenetic Aliases without forcing directory renames, and audits directional import violations to compute a deterministic `dna_compliance_score` (0–100).
@@ -58,7 +58,7 @@ Rather than relying on ad-hoc prompts or bloated external frameworks, `.agents` 
 
 | Subsystem | Physical Path | Verified Inventory & Scope |
 |:---|:---|:---|
-| **Root BIOS & Index** | `AGENTS.md`, `.agents/AGENTS_INDEX.md` | 33-row JIT Router, Iron Evidence Law, Lessword Mode, Unified Footer |
+| **Root BIOS & Index** | `AGENTS.md`, `.agents/AGENTS_INDEX.md` | 49-row JIT Router, Iron Evidence Law, Lessword Mode, Unified Footer |
 | **Rule Library** | `.agents/rules/*.md` | 13 Active Standards + `RULES_INDEX.md` + `ast/security_rules.yml` |
 | **Domain Skills** | `.agents/skills/*/SKILL.md` | 21 Public Domain Skills (+1 Internal) & 51 Tier-3 Reference Runbooks |
 | **Gateway CLI Engines** | `.agents/scripts/commands/*.py` | 14 Focused Engines (`brain`, `compact`, `decisions`, `dispenser`, `foundation`, `galaxy`, `observatory`, `polluter_finder`, `pulsar`, `rag`, `state_machine`, `verify_agents`, `worker`, `worktree`) |
@@ -84,8 +84,8 @@ Rather than relying on ad-hoc prompts or bloated external frameworks, `.agents` 
 | [Volume IV](04-rule_library___rules.md) | Rule Library (`rules/`) | Complete catalog of 13 behavioral laws, precedence hierarchy, and AST security rules |
 | [Volume V](05-skill___persona___skills.md) | Skill & Persona (`skills/`) | 3-Tier Progressive Disclosure, 21 public domain skills (+1 internal), and 51 references |
 | [Volume VI](06-workflow___sop.md) | Procedural Playbooks & SOPs | Full Lifecycle State Machine (Phases 0–6) and 18 canonical operating procedures |
-| [Volume VII](07-python_scripts___scripts.md) | Execution Engine (`scripts/`) | Complete module-by-module reference for `core/`, `core/harness/`, `commands/`, `verify_agents` 8 Gates & 26 Test Suites |
-| [Volume VIII](08-canons__templates__hooks__evals__and_archives.md) | Canons, Templates, Hooks & Evals | 48 Canons, Code-As-Harness verifiers, 19 Templates, Hooks, and 3 Evaluation Engines (`evals/`) |
+| [Volume VII](07-python_scripts___scripts.md) | Execution Engine (`scripts/`) | Complete module-by-module reference for `core/`, `core/harness/`, `commands/`, `verify_agents` 8 Gates & 43 Test Suites |
+| [Volume VIII](08-canons__templates__hooks__evals__and_archives.md) | Canons, Templates, Hooks & Evals | 65 Canons, Code-As-Harness verifiers, 23 Templates, Hooks, and 3 Evaluation Engines (`evals/`) |
 | [Volume IX](09-darwinian_evolution_lifecycle.md) | Automated Self-Learning Lifecycle & Harness | Skill Quarantine, 17 Admission Gates, Observation Ledger, Barrier Escalation & Reflexion Auto-Heal |
 | [Volume X](10-deployment_flow_to_new_projects.md) | Spoke Deployment Flow | 19-Platform IDE Manifest Matrix, Dependency-Aware Stack Resolver, Non-Interactive Setup & Bidirectional Sync |
 | [Volume XI](11-complete_glossary.md) | Complete Glossary | Canonical engineering definitions for all mechanisms, algorithms, and contracts |

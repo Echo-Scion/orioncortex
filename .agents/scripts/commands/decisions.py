@@ -40,19 +40,43 @@ DECISIONS_MD_PATH = AGENTS_DIR / "DECISIONS.md"
 
 
 def get_ledger_data(workspace_root: Optional[Path] = None) -> Dict[str, Any]:
-    """Load existing decision ledger JSON from .orion/working/."""
+    """Load existing decision ledger JSON from .orion/working/, falling back to .agents/DECISIONS.md."""
     ws = workspace_root or WORKSPACE_DIR
     path = ws / ".orion" / "working" / "decision_ledger.json"
     if path.is_file():
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                if isinstance(data, dict):
+                if isinstance(data, dict) and data.get("decisions"):
                     return data
         except Exception as e:
             _log_telemetry(e, "decisions:get_ledger_data")
-    return {"version": "1.0.0", "decisions": {}}
 
+    md_path = ws / ".agents" / "DECISIONS.md"
+    decisions_map: Dict[str, Any] = {}
+    if md_path.is_file():
+        try:
+            with open(md_path, "r", encoding="utf-8") as mf:
+                for line in mf:
+                    m = re.match(
+                        r"^\|\s*`(DEC-[^`]+)`\s*\|\s*`([^`]+)`\s*\|\s*([^|]+?)\s*\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|\s*([0-9-]+)\s*\|",
+                        line.strip(),
+                    )
+                    if m:
+                        dec_id, plan_n, topic_s, res_s, status_s, date_s = m.groups()
+                        decisions_map[dec_id] = {
+                            "id": dec_id,
+                            "plan": plan_n,
+                            "topic": topic_s.strip(),
+                            "question": topic_s.strip(),
+                            "options": [res_s],
+                            "status": status_s.strip(),
+                            "resolution": res_s.strip(),
+                            "timestamp": f"{date_s.strip()}T00:00:00+00:00",
+                        }
+        except Exception as e:
+            _log_telemetry(e, "decisions:hydrate_from_markdown")
+    return {"version": "1.0.0", "decisions": decisions_map}
 
 def save_ledger_data(ledger: Dict[str, Any], workspace_root: Optional[Path] = None) -> None:
     """Save decision ledger JSON atomically to .orion/working/."""

@@ -1616,27 +1616,32 @@ def run_rtk_proxy(args: List[str]) -> int:
         if raw_stdin.strip():
             try:
                 payload = json.loads(raw_stdin)
-                tool_name = (
-                    payload.get("tool_name")
-                    or payload.get("toolName")
-                    or payload.get("name")
-                    or payload.get("tool")
-                    or "run_command"
-                )
-                tool_args = (
-                    payload.get("tool_args")
-                    or payload.get("toolArgs")
-                    or payload.get("tool_input")
-                    or payload.get("toolInput")
-                    or payload.get("arguments")
-                    or payload.get("input")
-                    or payload.get("args")
-                    or payload.get("parameters")
-                    or {
-                        k: v for k, v in payload.items()
-                        if k not in ("tool_name", "toolName", "name", "tool", "conversationId", "session_id", "hook_event_name")
-                    }
-                )
+                tool_call_obj = payload.get("toolCall") if isinstance(payload.get("toolCall"), dict) else None
+                if tool_call_obj:
+                    tool_name = tool_call_obj.get("name") or "run_command"
+                    tool_args = tool_call_obj.get("args") or {}
+                else:
+                    tool_name = (
+                        payload.get("tool_name")
+                        or payload.get("toolName")
+                        or payload.get("name")
+                        or payload.get("tool")
+                        or "run_command"
+                    )
+                    tool_args = (
+                        payload.get("tool_args")
+                        or payload.get("toolArgs")
+                        or payload.get("tool_input")
+                        or payload.get("toolInput")
+                        or payload.get("arguments")
+                        or payload.get("input")
+                        or payload.get("args")
+                        or payload.get("parameters")
+                        or {
+                            k: v for k, v in payload.items()
+                            if k not in ("tool_name", "toolName", "name", "tool", "conversationId", "session_id", "hook_event_name")
+                        }
+                    )
                 session_id = (
                     payload.get("conversationId")
                     or os.environ.get("ANTIGRAVITY_CONVERSATION_ID", "cli_session")
@@ -1653,6 +1658,23 @@ def run_rtk_proxy(args: List[str]) -> int:
         norm_target_path = target_path_str.replace("\\", "/")
         if norm_target_path and (".agents/skills/" in norm_target_path or "skills/" in norm_target_path):
             sys.stderr.write("[PATH GUARD WARNING]: Modifying skill files under .agents/skills/ directly. Ensure changes conform to authoring guidelines in .agents/skills/meta-agent-admin/references/skills-catalog.md\n")
+
+        _SHELL_TOOL_NAMES = ("run_command", "execute_command", "Bash", "bash")
+        if tool_name in _SHELL_TOOL_NAMES and isinstance(tool_args, dict):
+            _guard_cmd = str(tool_args.get("CommandLine") or tool_args.get("command") or "")
+            if _guard_cmd:
+                try:
+                    from core.security import evaluate_command_guard
+                    _decision, _reason = evaluate_command_guard(_guard_cmd, workspace_dir)
+                    if _decision == "block":
+                        sys.stderr.write(f"[ZERO-TRUST GUARD]: {_reason}\n")
+                        sys.stdout.write(json.dumps({"decision": "deny", "reason": _reason}))
+                        return 0
+                    if _decision == "warn":
+                        sys.stderr.write(f"[ZERO-TRUST ADVISORY]: {_reason}\n")
+                except Exception as _ge:
+                    # INVARIANT [FAIL-OPEN-HOOK]: guard crash must never brick IDE tools
+                    _log_telemetry(_ge, "capabilities:command_guard")
 
         if is_tripped and not is_recovery_cmd:
             reason = f"Circuit breaker tripped ({fail_count} consecutive command failures detected in failures.log). Stop calling tools and conduct root-cause analysis or run reflexion."
@@ -1683,23 +1705,7 @@ def run_rtk_proxy(args: List[str]) -> int:
             except Exception as _he:
                 _log_telemetry(_he, "capabilities:rtk_hook_record")
 
-        if tool_name == "run_command" and isinstance(tool_args, dict):
-            _guard_cmd = str(tool_args.get("CommandLine") or tool_args.get("command") or "")
-            if _guard_cmd:
-                try:
-                    from core.security import evaluate_command_guard
-                    _decision, _reason = evaluate_command_guard(_guard_cmd, workspace_dir)
-                    if _decision == "block":
-                        sys.stderr.write(f"[ZERO-TRUST GUARD]: {_reason}\n")
-                        sys.stdout.write(json.dumps({"decision": "block", "reason": _reason}))
-                        return 0
-                    if _decision == "warn":
-                        sys.stderr.write(f"[ZERO-TRUST ADVISORY]: {_reason}\n")
-                except Exception as _ge:
-                    # INVARIANT [FAIL-OPEN-HOOK]: guard crash must never brick IDE tools
-                    _log_telemetry(_ge, "capabilities:command_guard")
-
-        if has_rtk and tool_name == "run_command":
+        if has_rtk and tool_name in _SHELL_TOOL_NAMES:
             try:
                 proc = subprocess.run(
                     [rtk_bin, 'hook', 'antigravity'],

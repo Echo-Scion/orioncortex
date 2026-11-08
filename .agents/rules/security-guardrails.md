@@ -103,6 +103,7 @@ Before running any of these, output the confirmation prompt and WAIT:
 - `DROP TABLE` / `DELETE FROM` (without `WHERE`)
 - `supabase db reset`
 - Any migration with `DROP COLUMN` or `DROP TABLE`
+- `python -c` bulk file overwrites or unlinks across multiple repository files
 
 **Format:**
 ```
@@ -120,7 +121,23 @@ Automated hook-level enforcement intercepts agent `run_command` before execution
 - **GUARD-PKG-NEW**: Block newly registered packages (<14 days old). Mitigates zero-day typosquatting and slop registration windows.
 - **GUARD-RCE-01**: Block remote scripts piped directly into shell interpreters (`curl|sh`, `wget|bash`, `iwr|iex`, `irm|iex`).
 - **GUARD-DEL-01**: Block destructive recursive deletions targeting root, user home, or drive roots (`rm -rf /`, `Remove-Item C:\ -Recurse`).
+- **GUARD-INLINE-01**: Block lethal file self-truncation antipatterns (`open(path, 'w*').write(...open(...))`). Evaluates the write handle before reading, truncating files to 0 bytes.
+- **GUARD-INLINE-02**: Block destructive bulk file mutations via inline `python -c` combining directory iteration (`os.walk`, `glob`, `Path.rglob`) with write or unlink operations.
 - **GUARD-LOCK-01**: Warn and advise hermetic installation when lockfiles exist (`npm ci`, `pnpm --frozen-lockfile`, `yarn --immutable`, `dart pub get --enforce-lockfile`).
+
+## 5.6. Zero Destructive One-Liner & Canonical Line-Ending Invariant (`INVARIANT [ZERO_DESTRUCTIVE_ONE_LINER]`)
+
+1. **Zero Destructive Shell One-Liners**: Strictly forbidden to perform bulk file modifications, re-encoding, or text replacement using inline shell one-liners (`python -c`, `sed`, `awk`, PowerShell loops).
+2. **Lethal Antipattern Prohibited**: Never write `open(f, 'w').write(open(f).read())`. Python evaluates the left-hand write handle before reading the argument, instantly zeroing target files.
+3. **Canonical Line-Ending Normalization Protocol**: Line ending normalization MUST use Git engine mechanisms:
+   ```bash
+   # 1. Ensure .gitattributes locks desired line ending
+   echo "* text=auto eol=lf" >> .gitattributes
+   # 2. Renormalize tracked working tree files via Git
+   git add --renormalize .
+   ```
+4. **Two-Phase Read-then-Atomic-Write Pattern**: When programmatic modifications are required, use a standalone script in `.scratch/` with an explicit read phase, size assertion (`len(data) > 0`), and atomic write replacement.
+5. **Git Blast-Radius Verification**: After any batch file operation, the agent MUST run `git status` and `git diff --stat`. If deletions exceed 50 lines outside the prompt's explicit scope, STOP and revert immediately (`git checkout -- .`).
 
 ## 6. Persistent Learning (Post-Mortem Protocol)
 

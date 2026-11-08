@@ -108,12 +108,17 @@ class ToolQuantumCapture:
             )
         state.tool_call_count += 1
         state.total_turns += 1
-        is_post_success = isinstance(args, dict) and args.get("exit_code") == 0
+        is_offline_handoff = (
+            isinstance(args, dict)
+            and args.get("exit_code") == 2
+            and tool_name in ("orion:worker", "orion:delegate")
+        )
+        is_post_success = isinstance(args, dict) and (args.get("exit_code") == 0 or is_offline_handoff)
         if isinstance(args, dict):
             ec = args.get("exit_code") if "exit_code" in args else args.get("exitCode")
-            if ec is not None and isinstance(ec, int) and ec > 0:
+            if ec is not None and isinstance(ec, int) and ec > 0 and not is_offline_handoff:
                 try:
-                    from commands.pulsar import ObservationLedger, BASE_DIR as _REFLEXION_BASE
+                    from core.observation import ObservationLedger, _BASE_DIR as _REFLEXION_BASE
                     norm_state = os.path.abspath(self.state_dir)
                     ws_root = os.path.abspath(os.path.dirname(_REFLEXION_BASE))
                     if norm_state.startswith(ws_root):
@@ -173,11 +178,10 @@ class ToolQuantumCapture:
         self.save_session(state)
         # Flush observations on watermark boundary
         try:
-            from commands.pulsar import ObservationLedger
+            from core.observation import ObservationLedger
             ObservationLedger().get_digest()
         except Exception as _e:
             _log_telemetry(_e, "capture.py:reset_reflection_watermark:flush_obs")
-
     def reset_circuit_breaker(self, session_id: str) -> None:
         state = self.load_session(session_id)
         state.active = True

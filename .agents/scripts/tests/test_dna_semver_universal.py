@@ -284,13 +284,13 @@ class TestDNASemVerUniversal(unittest.TestCase):
             mcp_path = os.path.join(mcp_dir, "index.ts")
 
             with open(pkg_path, "w", encoding="utf-8") as f:
-                f.write('{\n  "name": "flutterin",\n  "version": "0.0.1"\n}\n')
+                f.write('{\n  "name": "orion-cli",\n  "version": "0.0.1"\n}\n')
             with open(plugin_path, "w", encoding="utf-8") as f:
-                f.write('{\n  "id": "flutterin",\n  "version": "0.0.1"\n}\n')
+                f.write('{\n  "id": "orion-cli",\n  "version": "0.0.1"\n}\n')
             with open(cli_path, "w", encoding="utf-8") as f:
-                f.write('program\n  .name("flutterin")\n  .version("0.0.1");\n')
+                f.write('program\n  .name("orion-cli")\n  .version("0.0.1");\n')
             with open(mcp_path, "w", encoding="utf-8") as f:
-                f.write('const server = new Server({\n  name: "flutterin-mcp",\n  version: "0.0.1",\n});\n')
+                f.write('const server = new Server({\n  name: "orion-mcp",\n  version: "0.0.1",\n});\n')
 
             det = detect_project_version(td)
             self.assertEqual(det.semver, "0.0.1")

@@ -118,7 +118,7 @@ For the active AI platform, create its manifest in the target project root point
 ```json
 {
   "name": "orioncortex",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
   "skills": ".agents/skills"
 }
@@ -216,5 +216,5 @@ when unavailable.
 
 ---
 > [!NOTE]
-> **Version**: 0.1.1 (Script-Enforced Gateway & AI Direct Instruction Protocol)  
+> **Version**: 0.1.2 (Script-Enforced Gateway & AI Direct Instruction Protocol)  
 > All 19 AI coding platforms are supported natively with zero lock-in, zero cloud daemons, and zero pip dependencies.

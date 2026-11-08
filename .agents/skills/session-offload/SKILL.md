@@ -6,7 +6,9 @@ description: >-
 
 # Session Offload (`/session-offload`)
 
-This skill defines the strict shutdown sequence for all AI agents finishing a session.
+> **Stateless IDE Tab Notice**: Normal IDE chat tabs are stateless and disposable—`pre-agent-wake.py` automatically derives live resume context from `git status --porcelain`, `git diff`, and `.orion/orion.db` without requiring manual session closure. Execute this full `/session-offload` sequence ONLY at major milestone boundaries, pre-release audits, or when explicitly requested by the user.
+
+This skill defines the milestone consolidation and shutdown sequence when requested.
 
 > **MANDATORY CHECKLIST RULE**: Before executing the steps below, you MUST create a `task.md` artifact (or use the existing one) containing a checklist of all steps 1 to 5. You must physically update the checklist `[x]` as you complete each step. You are NOT allowed to skip any step.
 

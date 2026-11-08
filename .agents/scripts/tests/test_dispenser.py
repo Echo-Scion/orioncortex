@@ -327,6 +327,28 @@ primary_color = '#fff'
             ok, err = verify_patch_applied_on_disk(task, temp_path)
             self.assertTrue(ok)
 
+            # Reject when only shared context lines match but novel replacement lines are missing
+            f.write_text("# comment\ndef calc(x):\n    if x > 0:\n        return 1\n", encoding="utf-8")
+            partial_task = {
+                "target_file": "sample.py",
+                "search_code": "def calc(x):\n    # old comment\n    if x > 0:\n        return 1",
+                "replacement_code": "def calc(x):\n    if x > 0:\n        return 999",
+            }
+            ok_p, err_p = verify_patch_applied_on_disk(partial_task, temp_path)
+            self.assertFalse(ok_p)
+            self.assertIn("does not contain the expected REPLACE block lines", err_p)
+
+            # Reject empty file when search_code is empty
+            f.write_text("   \n", encoding="utf-8")
+            empty_task = {
+                "target_file": "sample.py",
+                "search_code": "",
+                "replacement_code": "",
+            }
+            ok_e, err_e = verify_patch_applied_on_disk(empty_task, temp_path)
+            self.assertFalse(ok_e)
+            self.assertIn("empty on disk", err_e)
+
     def test_align_replacement_indentation(self):
         from commands.dispenser import _align_replacement_indentation
         raw_disk = "        def inner_func():\n            return 1"
@@ -376,6 +398,34 @@ new_part_2 = False
         ]
         orphaned = check_finding_coverage(content, tasks)
         self.assertEqual(orphaned, ["TTP-S01"])
+
+
+
+    def test_review_round_circuit_breaker_and_skill_doctor(self):
+        from commands.worker import _check_and_increment_review_round, MAX_REVIEW_ROUNDS
+        from commands.pulsar import classify_correction_hierarchy, run_skill_doctor
+
+        _check_and_increment_review_round("spec_demo.md", reset=True)
+        for expected_r in range(1, MAX_REVIEW_ROUNDS + 1):
+            r_num, ok = _check_and_increment_review_round("spec_demo.md")
+            self.assertEqual(r_num, expected_r)
+            self.assertTrue(ok)
+        r_over, ok_over = _check_and_increment_review_round("spec_demo.md")
+        self.assertEqual(r_over, MAX_REVIEW_ROUNDS + 1)
+        self.assertFalse(ok_over)
+        _check_and_increment_review_round("spec_demo.md", reset=True)
+
+        c1 = classify_correction_hierarchy("core/db.py", "TypeError: invalid schema contract")
+        self.assertEqual(c1["rank"], 1)
+        c2 = classify_correction_hierarchy("verify_agents.py", "Missing utf-8 encoding lint")
+        self.assertEqual(c2["rank"], 2)
+        c3 = classify_correction_hierarchy("dispenser.py", "AssertionError on rollback exit code")
+        self.assertEqual(c3["rank"], 3)
+
+        sd_rep = run_skill_doctor()
+        self.assertTrue(sd_rep["ok"])
+        self.assertEqual(sd_rep["total_skills"], 21)
+        self.assertEqual(sd_rep["trigger_only_compliant"], 21)
 
 
 if __name__ == "__main__":

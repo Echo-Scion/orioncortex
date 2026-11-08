@@ -435,7 +435,12 @@ class TransactionalUpgrader:
                 if not local_file.is_file():
                     changed_files.append(rel)
                 else:
-                    if local_file.read_bytes() != src_file.read_bytes():
+                    if rel in ("AGENTS.md", "GEMINI.md"):
+                        local_txt = local_file.read_text(encoding="utf-8", errors="replace")
+                        src_txt = src_file.read_text(encoding="utf-8", errors="replace")
+                        if SurgicalBiosSplicer.splice(local_txt, src_txt) != local_txt:
+                            changed_files.append(rel)
+                    elif local_file.read_bytes() != src_file.read_bytes():
                         changed_files.append(rel)
 
             return {

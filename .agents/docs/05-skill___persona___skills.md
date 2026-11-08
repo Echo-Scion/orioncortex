@@ -82,7 +82,7 @@ The agent loads Tier 1 during discovery, mounts Tier 2 when activated via JIT ro
   - `plan-checklist.md`, `security.md`, `skill_inspector.md`, `telemetry-gate.md`.
 
 ### 12.10. `feature-discovery`
-- **Domain**: Socratic requirements elicitation, design discovery, and Goldfish Zero-Trust exploration.
+- **Domain**: Socratic requirements elicitation, design discovery, and Stateless Zero-Trust exploration.
 - **Core Directives**: Single-question turns, "look before you ask" codebase context reads, dive-in escape hatches, and builder-check subagent validation.
 - **Reference**: `.agents/skills/feature-discovery/SKILL.md`.
 

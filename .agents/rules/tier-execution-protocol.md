@@ -2,7 +2,7 @@
 description: Protocol for selecting the correct model tier and the enforced workflows per tier (Bento Box, Auto-router).
 activation: model_decision
 
-version: 0.1.1
+version: 0.1.2
 last_updated: 2026-09-26
 ---
 

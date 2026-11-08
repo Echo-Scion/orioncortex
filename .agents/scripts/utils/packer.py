@@ -331,6 +331,7 @@ def is_foundation_root(root_dir: str) -> bool:
     app_indicators = [
         "package.json", "pubspec.yaml", "Cargo.toml", "go.mod", "tsconfig.json",
         "pom.xml", "build.gradle", "build.gradle.kts", "CMakeLists.txt",
+        "pyproject.toml", "setup.py", "requirements.txt",
     ]
     for ind in app_indicators:
         if os.path.exists(os.path.join(abs_root, ind)):

@@ -12,7 +12,13 @@ This workflow defines how the agent ecosystem learns and updates itself to preve
 - [ ] **Trace Extraction**: If a tool call fails (Exit Code > 0) or the user corrects you, mechanically extract the error trace into an XML block `<error_trace>`.
 - [ ] **Root Cause Analysis**: Identify if the failure was due to a missing rule, contradictory instruction, or a missing context link.
 
-## 2. MEMORY WRITE (PERSISTENCE)
+## 2. MECHANICAL ENFORCEMENT HIERARCHY (`/correct` 4-Tier Ranking) & MEMORY WRITE
+- [ ] **Rank Fixes by Durability (Code > Lint > Test > Prompt Last)**: A written prompt line is the weakest defense. Before adding prose to `SKILL.md` or `LEARNINGS.md`, enforce the fix at the highest viable mechanical tier (`classify_correction_hierarchy` in `pulsar.py`):
+  1. **Tier 1 — Architectural / Type Guard (`TIER_1_ARCHITECTURE_OR_TYPE`)**: Make the mistake impossible via schema, type signature, or 5-Tier DNA boundary in `core/`.
+  2. **Tier 2 — Deterministic AST / Lint Gate (`TIER_2_DETERMINISTIC_LINT_OR_AST`)**: Block the anti-pattern in `verify_agents.py`, `dna.py`, or `security.py`.
+  3. **Tier 3 — Regression Unit Test (`TIER_3_REGRESSION_TEST`)**: Lock the expected behavior with an automated test in `.agents/scripts/tests/`.
+  4. **Tier 4 — Skill Guard Clause (`TIER_4_SKILL_PROSE_LAST_RESORT`)**: Append a concise rule to `SKILL.md` only when Tiers 1–3 are infeasible.
+- [ ] **Shim Flywheel & Skill Doctor**: Run `python .agents/scripts/orion.py skill-doctor` to audit trigger-only frontmatter compliance, byte budgets, and telemetry firing counts across all 21 skills.
 - [ ] **Update Learnings**: The Agent MUST use `replace_file_content` or `python .agents/scripts/orion.py reflexion record` to inject the finding into `.agents/LEARNINGS.md` without delay.
 - [ ] **4-Tuple Failure Pattern Contract (Harness-Zero Protocol)**:
   Every systemic reflection MUST capture:

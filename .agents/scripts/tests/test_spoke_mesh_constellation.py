@@ -76,10 +76,10 @@ class TestSpokeMeshConstellation(unittest.TestCase):
         )
 
         # Star 2: Node MCP Project
-        star2 = parent_dir / "flutterin"
+        star2 = parent_dir / "nexus_mcp"
         star2.mkdir()
         (star2 / "package.json").write_text(
-            json.dumps({"name": "flutterin", "dependencies": {"@modelcontextprotocol/sdk": "^1.0.0"}}),
+            json.dumps({"name": "nexus_mcp", "dependencies": {"@modelcontextprotocol/sdk": "^1.0.0"}}),
             encoding="utf-8",
         )
 
@@ -92,7 +92,7 @@ class TestSpokeMeshConstellation(unittest.TestCase):
         names = [s.name for s in discovered]
 
         self.assertIn("echont", names)
-        self.assertIn("flutterin", names)
+        self.assertIn("nexus_mcp", names)
         self.assertNotIn("_foundation", names)
         self.assertNotIn("random_notes", names)
 
@@ -102,8 +102,8 @@ class TestSpokeMeshConstellation(unittest.TestCase):
         self.assertIn("Flutter", echont_star.stack)
         self.assertIn("VISION.md", echont_star.context_files)
 
-        flutterin_star = next(s for s in discovered if s.name == "flutterin")
-        self.assertIn("MCP", flutterin_star.stack)
+        nexus_star = next(s for s in discovered if s.name == "nexus_mcp")
+        self.assertIn("MCP", nexus_star.stack)
 
     def test_cache_and_dirty_checking(self):
         cache = {"stars": {"echont": {"latest_mtime": 100.0}}, "last_full_sync": 100.0}
@@ -127,8 +127,8 @@ class TestSpokeMeshConstellation(unittest.TestCase):
         star1_ctx = self.workspace_root / "echont_vision.md"
         star1_ctx.write_text("# Echont North Star\n", encoding="utf-8")
 
-        star2_ctx = self.workspace_root / "flutterin_arch.md"
-        star2_ctx.write_text("# Flutterin Architecture\n", encoding="utf-8")
+        star2_ctx = self.workspace_root / "nexus_arch.md"
+        star2_ctx.write_text("# Nexus Architecture\n", encoding="utf-8")
 
         stars = [
             SpokeStar(
@@ -140,8 +140,8 @@ class TestSpokeMeshConstellation(unittest.TestCase):
                 context_files={"VISION.md": str(star1_ctx)},
             ),
             SpokeStar(
-                name="flutterin",
-                root_path=str(self.workspace_root / "flutterin"),
+                name="nexus_mcp",
+                root_path=str(self.workspace_root / "nexus_mcp"),
                 stack="Node / TypeScript",
                 dna_state="ADAPTED",
                 dna_score=95,
@@ -159,7 +159,7 @@ class TestSpokeMeshConstellation(unittest.TestCase):
         self.assertTrue((vault_out / "00_Hub" / "Overview.md").is_file())
         self.assertTrue((vault_out / "Stars" / "echont" / "Overview.md").is_file())
         self.assertTrue((vault_out / "Stars" / "echont" / "VISION.md").is_file())
-        self.assertTrue((vault_out / "Stars" / "flutterin" / "ARCHITECTURE.md").is_file())
+        self.assertTrue((vault_out / "Stars" / "nexus_mcp" / "ARCHITECTURE.md").is_file())
         self.assertTrue((vault_out / "Taxonomies" / "Flutter.md").is_file())
         self.assertTrue((vault_out / "Taxonomies" / "Node.md").is_file())
         self.assertTrue((vault_out / ".constellation_manifest.json").is_file())
@@ -167,7 +167,7 @@ class TestSpokeMeshConstellation(unittest.TestCase):
         # Check content of 00_Hub/Overview.md
         hub_text = (vault_out / "00_Hub" / "Overview.md").read_text(encoding="utf-8")
         self.assertIn("[[Stars/echont/Overview|echont]]", hub_text)
-        self.assertIn("[[Stars/flutterin/Overview|flutterin]]", hub_text)
+        self.assertIn("[[Stars/nexus_mcp/Overview|nexus_mcp]]", hub_text)
         self.assertIn("100/100", hub_text)
 
     def test_constellation_vault_export_with_integrated_graph(self):

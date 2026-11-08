@@ -91,7 +91,7 @@ The Subagent MUST NOT write or edit files in the workspace. All file mutations b
   ```
 - **Execution**: The Main Agent reviews the patch specification and applies edits using native file-editing tools.
 
-### Archetype 3: `reviewer` (Isolated Reviewer & 5-Lens Goldfish Swarm)
+### Archetype 3: `reviewer` (Isolated Reviewer & Stateless 5-Lens Swarm)
 - **Role**: Stateless, read-only auditor evaluating diffs, technical blueprints (`context/00_Strategy/BLUEPRINT.md`), or architectural proposals (`implementation_plan.md`) across 5 focused lenses:
   1. `simplicity-reuse`: High-altitude simplicity, YAGNI, anti-weeds, and codebase reuse.
   2. `comprehension`: Synthesizes what this proposes and how the existing system works; failure to synthesize = Blocker.

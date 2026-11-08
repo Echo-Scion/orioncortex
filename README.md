@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="VERSION"><img src="https://img.shields.io/badge/version-v0.1.1-blue.svg?style=flat-square" alt="Version"></a>
+  <a href="VERSION"><img src="https://img.shields.io/badge/version-v0.1.2-blue.svg?style=flat-square" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg?style=flat-square" alt="License"></a>
   <a href="#-the-four-anchored-pillars"><img src="https://img.shields.io/badge/core-Python%203.10%2B%20Stdlib-brightgreen.svg?style=flat-square" alt="Core"></a>
   <a href="#-the-four-anchored-pillars"><img src="https://img.shields.io/badge/database-SQLite3%20WAL-informational.svg?style=flat-square" alt="Database"></a>
@@ -53,7 +53,9 @@ Every subsystem addresses a systemic failure mode of autonomous AI coding throug
 
 ### 1. 🧠 Cognitive Memory & Local GraphRAG (`brain.py`, `rag.py`)
 * **Problem**: AI agents suffer from episodic amnesia across sessions, hallucinate from superseded architectural decisions, lose contextual continuity as chat history is truncated, and risk leaking sensitive intellectual property when forced to use third-party cloud vector databases.
-* **How it Works**: Implements a zero-cloud, 100% local Dual-Level GraphRAG engine combining SQLite3 WAL FTS5 BM25 lexical search, vector similarity, and pure-Python Louvain community clustering. Raw session turns compress into anchored observations (`[O1]`) that roll over into generational memory (`memory_generations`) with Shannon surprisal filtering and `superseded_by` anti-flashback tracking.
+* **How it Works**: Implements a hybrid Dual-Level GraphRAG engine combining SQLite3 WAL FTS5 BM25 lexical search, vector similarity, and pure-Python Louvain community clustering.
+  - **Deterministic Phase (Zero-Cloud Stdlib)**: Code imports, symbol definitions, and markdown cross-references are extracted instantly via AST into a 100% connected knowledge graph.
+  - **Cognitive Phase (LLM-Assisted Triplets)**: Conceptual triplets are mined by local Ollama LLMs or enqueued to `.orion/working/triplet_queue.json` for Cloud Agent injection. Raw session turns compress into anchored observations (`[O1]`) that roll over into generational memory (`memory_generations`) with Shannon surprisal filtering and `superseded_by` anti-flashback tracking.
 * 📖 *Deep Dive: [.agents/docs/03-local_rag_brain.md](.agents/docs/03-local_rag_brain.md)*
 
 ### 2. 🌌 Multi-Project Portfolio Mesh (`commands/galaxy.py`, `core/spoke_mesh.py`)
@@ -79,7 +81,7 @@ Every subsystem addresses a systemic failure mode of autonomous AI coding throug
 ### 6. 🍱 Sequential Execution Harness: Task Slicer & Stage Impulse Dispenser (`commands/dispenser.py`)
 * **Problem**: Frontier and budget models lose track of complex multi-file implementation plans, hallucinate outdated line numbers, skip intermediate edits, or corrupt files during large unstructured code generations.
 * **How it Works**:
-  - **Functional Engineering Role (Sequential Task Slicer)**: Decomposes large implementation plans into atomic, single-step Action Cards (`ACTIVE_TASK.md`) sorted by topological blast-radius ($T_0 \to T_5$) and bottom-up file position. Recalibrates live disk line spans before every modification and enforces a Post-Condition Disk Mutation Gate (`Exit Code 2` on skips) before advancing.
+  - **Functional Engineering Role (Sequential Task Slicer)**: Fast-Tracks small tasks (<= 2 files) with zero ceremony, and decomposes large multi-file implementation plans into atomic, single-step Action Cards (`ACTIVE_TASK.md`) sorted by topological blast-radius ($T_0 \to T_5$) and bottom-up file position. Recalibrates live disk line spans before every modification and enforces a Post-Condition Disk Mutation Gate (`Exit Code 2` on skips) before advancing.
   - **Cosmic-Neuro Taxonomy Role (Stage / Impulse Dispenser)**: Dispenses quantized task impulses from the macro roadmap to prevent runaway agent hallucination, while maintaining backward compatibility with the colloquial "Bento" action-card workflow (`orion slicer`, `orion task-slicer`, `orion dispenser`, or `orion bento`).
 * 📖 *Deep Dive: [.agents/docs/02-system_architecture.md](.agents/docs/02-system_architecture.md) & [.agents/docs/06-workflow___sop.md](.agents/docs/06-workflow___sop.md)*
 
@@ -137,29 +139,26 @@ python .agents/scripts/orion.py preflight --pillars
 ```
 
 ### 🧠 Dual-Worker Cognitive Engine & Cloud Slot Routing
-OrionCortex v0.1.0 decouples on-device mechanics from high-parameter reasoning through an elastic dual-worker architecture:
+OrionCortex v0.1.1 decouples on-device mechanics from high-parameter reasoning through an elastic dual-worker architecture:
 - **Worker 1 (Local Neural Coprocessor)**: Drives zero-cost offline embeddings (`nomic-embed-text`), AST syntax repair, and generational memory summaries via Ollama or llama-server without third-party API exposure.
 - **Worker 2 (Remote Multi-Provider Cloud Slots)**: Routes parameter-heavy tasks (`-32B`, `-70B`) through configurable provider slots (`Chutes.ai`, `9Router` on `:20128`, `OpenRouter`, `Groq`, `Cerebras`, `xAI`) with strict HTTPS validation, loopback allowances, bearer token masking, and 12-vector secret redaction.
 
 ---
 
 <a id="-quickstart"></a>
-## 🚀 Quickstart & Hub-and-Spoke Topology
+## 🚀 Quickstart & Architecture Modes
 
-`.agents` operates in a **Hub-and-Spoke** topology: the **Upstream Hub** (`<foundation_path>`) develops and validates master templates/scripts, while **Downstream Spokes** (your application repositories) consume `.agents/` and push evolved patterns back upstream.
+OrionCortex supports two deployment modes: **Single-Project Mode** (standalone app repository) and **Multi-Project Portfolio Mesh** (Hub-and-Spoke via Galaxy & Constellation).
 
-### 1. Operating in a Downstream Spoke Project (Your App)
+### Mode A: Standalone Application Project (Direct App)
 
-#### Step A: Install `.agents` into your project
+#### Step 1: Install `.agents` into your project
 ```bash
-# Option 1: Clone directly as .agents
+# Clone directly into your application directory
 git clone https://github.com/Echo-Scion/orioncortex.git .agents
-
-# Option 2: Deploy from a local Upstream Hub on your machine
-python /path/to/<foundation_path>/.agents/scripts/orion.py deploy --target <project_path>
 ```
 
-#### Step B: Run Setup (Human vs AI Agent)
+#### Step 2: Run Setup (Human vs AI Agent)
 * **For Humans (Interactive Terminal Wizard)**:
   ```bash
   python .agents/scripts/orion.py setup
@@ -174,26 +173,34 @@ python /path/to/<foundation_path>/.agents/scripts/orion.py deploy --target <proj
   python .agents/scripts/orion.py doctor
   ```
 
-#### Step C: Surgically Upgrading Downstream Spokes
-Keep downstream spoke projects synchronized with upstream framework updates without clobbering sovereign assets (`context/**`, `.orion/**`, local rules/skills, and `## PROJECT-SPECIFIC MANDATES`):
+#### Step 3: Surgically Upgrading `.agents`
+Keep your project synchronized with upstream framework updates without clobbering sovereign assets (`context/**`, `.orion/**`, local rules/skills, and `## PROJECT-SPECIFIC MANDATES`):
 ```bash
 # Preview changes safely without modifying disk
 python .agents/scripts/orion.py upgrade --check
 
-# Execute surgical upgrade from upstream GitHub repository or local path
+# Execute surgical upgrade from upstream GitHub repository
 python .agents/scripts/orion.py upgrade --source https://github.com/Echo-Scion/orioncortex.git
 ```
 
-### 2. Operating in the Upstream Foundation Hub (`<foundation_path>`)
+---
+
+### Mode B: Multi-Project Portfolio Mesh (Hub-and-Spoke via Galaxy & Constellation)
+
+Teams and developers managing multiple repositories (microservices, mobile apps, web backends) can maintain a central **Foundation Hub** that deploys standards and tracks architectural health across all sibling **Spoke Projects**:
+
 ```bash
-# Verify Hub mechanical & architectural integrity
-python .agents/scripts/orion.py verify
+# 1. Deploy Foundation standards to a downstream spoke repository from your local Hub
+python .agents/scripts/orion.py deploy --target /path/to/spoke_project
 
-# Deploy updated Foundation to a downstream spoke project
-python .agents/scripts/orion.py deploy --target <project_path>
+# 2. Discover sibling spoke repositories across the portfolio and audit scorecards
+python .agents/scripts/orion.py portfolio status   # or 'orion.py galaxy status'
 
-# Sync hardened rules/canons from a spoke back to the Hub
-python .agents/scripts/orion.py foundation push-upstream --project <project_path>
+# 3. Synchronize cross-project portfolio knowledge mesh into an Obsidian vault
+python .agents/scripts/orion.py portfolio sync     # or 'orion.py galaxy sync'
+
+# 4. Sync evolved rules and hardened canons from an active spoke back to your Hub
+python .agents/scripts/orion.py foundation push-upstream --project /path/to/spoke_project
 ```
 
 ---

@@ -23,10 +23,12 @@ python .agents/scripts/orion.py <command> [args...]
 | `orion_ops resolve <query>`| Resolves wikilink nodes and returns graph neighborhood context. | `commands/brain.py` |
 | `graph <action>` | Direct interface to Pure-Python Louvain Modularity & Dual-Level GraphRAG. | `core/orion_graph.py` |
 | `linkify` | Auto-injects wikilinks across context and agent files. | `commands/pulsar.py` |
+| `skill-doctor` | Audits skill trigger-only frontmatter hygiene, byte budgets, and shim telemetry. | `commands/pulsar.py` |
 | `compile` | Compiles Markdown rules into dense JSON matrices in `.orion/matrix/`. | `commands/brain.py` |
 | `matrix <query>` | Queries compiled JSON rule matrices. | `commands/brain.py` |
 | `contradict` | Detects and resolves colliding triplet predicates. | `commands/brain.py` |
 | `raw_ingest` | Ingests unstructured files in `context/raw/` into markdown wiki nodes. | `commands/brain.py` |
+| `rag <sync\|query\|page\|recall\|diagnostics>` | Direct hybrid RAG retrieval, context paging, episodic anchor recall, and diagnostics CLI. | `commands/rag.py` |
 | `diagnostics` | Evaluates RAG retrieval relevance, context grounding, and latency metrics. | `commands/rag.py` |
 | `constellation <action>` | Supervisory Multi-Project Knowledge Mesh & Second Brain (`status`, `sync`, `export`, `add`, `remove`). | `commands/galaxy.py` |
 | `galaxy <action>` | Dual-Layer Cosmic-Neuro supervisory Multi-Project Portfolio Mesh (alias for `constellation`). | `commands/galaxy.py` |

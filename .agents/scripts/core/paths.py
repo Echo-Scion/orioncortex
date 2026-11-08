@@ -22,7 +22,7 @@ DEFAULT_IGNORE_DIRS: Set[str] = {
     ".nuxt", "out", "Pods", "DerivedData", "CMakeFiles", "obj", ".bundle",
     "bower_components", "venv", ".venv", "env", "installs", "backups",
     "cache", "audio_cache", "image_cache", "state-snapshots", "logs",
-    "hermes-agent", "tools", "constellation"
+    "hermes-agent", "constellation"
 }
 
 DEFAULT_IGNORE_FILENAMES: Set[str] = {

@@ -317,9 +317,7 @@ def _partition_into_disjoint_tracks(
             f2 = unique_files[j]
             c2 = closures[f2]
             intersection = c1.intersection(c2)
-            union = c1.union(c2)
-            jaccard = len(intersection) / len(union) if union else 0.0
-            if jaccard > 0.05:
+            if intersection:
                 adj[f1].add(f2)
                 adj[f2].add(f1)
 
@@ -647,36 +645,30 @@ def sync_orion_infrastructure(
         ledger_lines.append(
             f"- {t['task_id']} {status_tag}: `{t['target_file']}#L{t['start_line']}-L{t['end_line']}` — {t['title']} [{t.get('execution_lane', 'LANE-2')}]"
         )
-    atomic_write_text(audit_dir / "00-ledger.md", "\n".join(ledger_lines) + "\n")
+    # Only write audit ledger files when an audit ledger is actively in use or source is an audit report
+    if (audit_dir / "00-ledger.md").is_file() or "audit" in str(source_file).lower():
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        atomic_write_text(audit_dir / "00-ledger.md", "\n".join(ledger_lines) + "\n")
 
     if active_task:
-        audit_state_md = (
-            "# AUDIT STATE\n\n"
-            f"**Current Phase:** Remediation Execution ({current_index + 1} of {len(tasks)})\n"
-            f"**Current Focus:** `{active_task['target_file']}` (Lines {active_task['start_line']}–{active_task['end_line']})\n"
-            f"**Active Task:** `{active_task['task_id']}` [{active_task.get('execution_lane', 'LANE-2')}] — {active_task['title']}\n"
-            f"**Next Action:** Read `.orion/working/{ACTIVE_TASK_FILE}`, apply the surgical replacement to `{active_task['target_file']}`, and run `{active_task['verification_cmd']}`.\n"
-        )
+        task_md_lines = [
+            "# Active Execution Checklist (.orion/task.md)",
+            f"> **Progress**: {min(current_index, len(tasks))}/{len(tasks)} completed",
+            "",
+        ]
+        for idx, t in enumerate(tasks):
+            box = "[x]" if idx < current_index or t.get("status") == "DONE" else ("[/]" if idx == current_index else "[ ]")
+            task_md_lines.append(
+                f"- {box} **Task {t['task_id']}**: `{t['target_file']}` (L{t['start_line']}-L{t['end_line']}) — {t['title']} [{t.get('execution_lane', 'LANE-2')}]"
+            )
+        atomic_write_text(orion_dir / "task.md", "\n".join(task_md_lines) + "\n")
     else:
-        audit_state_md = (
-            "# AUDIT STATE\n\n"
-            f"**Current Phase:** DONE ({len(tasks)}/{len(tasks)} tasks verified)\n"
-            "**Current Focus:** None\n"
-            "**Next Action:** All remediation tasks are [FIXED]. Run `python .agents/scripts/orion.py verify`.\n"
-        )
-    atomic_write_text(audit_dir / "AUDIT_STATE.md", audit_state_md)
-
-    task_md_lines = [
-        "# Active Execution Checklist (.orion/task.md)",
-        f"> **Progress**: {min(current_index, len(tasks))}/{len(tasks)} completed",
-        "",
-    ]
-    for idx, t in enumerate(tasks):
-        box = "[x]" if idx < current_index or t.get("status") == "DONE" else ("[/]" if idx == current_index else "[ ]")
-        task_md_lines.append(
-            f"- {box} **Task {t['task_id']}**: `{t['target_file']}` (L{t['start_line']}-L{t['end_line']}) — {t['title']} [{t.get('execution_lane', 'LANE-2')}]"
-        )
-    atomic_write_text(orion_dir / "task.md", "\n".join(task_md_lines) + "\n")
+        for stale_p in (orion_dir / "task.md", working_dir / FSM_STATE_FILE, audit_dir / "AUDIT_STATE.md"):
+            if stale_p.is_file():
+                try:
+                    stale_p.unlink()
+                except OSError:
+                    pass
 
     ctx_path = working_dir / CONTEXT_FILE
     ctx_data: Dict[str, Any] = {}
@@ -722,6 +714,10 @@ def _align_replacement_indentation(raw_window: str, search_code: str, replacemen
     delta = disk_indent - md_indent
 
     if delta == 0:
+        non_empty_repl = [ln for ln in repl_lines if ln.strip()]
+        if non_empty_repl and disk_indent > 0 and (len(non_empty_repl[0]) - len(non_empty_repl[0].lstrip())) == 0:
+            pad = " " * disk_indent
+            return "\n".join(pad + ln if ln.strip() else ln for ln in repl_lines)
         return replacement_code
     elif delta > 0:
         pad = " " * delta
@@ -880,12 +876,13 @@ def cmd_init(plan_path: str) -> int:
     # Record Plan Decisions upfront
     try:
         from commands.decisions import record_plan_decisions
-        resolved_count, total_count = record_plan_decisions(str(src), auto_resolve=True, workspace_root=ws)
+        recorded_decisions = record_plan_decisions(str(src), auto_resolve=True, workspace_root=ws)
+        total_count = len(recorded_decisions)
+        resolved_count = sum(1 for d in recorded_decisions if d.get("status") != "PENDING")
         if total_count > 0:
             print(f"  ✓ Decision Gate: Auto-resolved {resolved_count}/{total_count} architectural decisions into .agents/DECISIONS.md.")
     except Exception as e:
         _log_telemetry(e, "bento_slicer:cmd_init_decisions")
-
     orphaned = check_finding_coverage(content, tasks)
     if orphaned:
         print(f"⚠️  [BENTO COVERAGE WARNING] Found {len(orphaned)} audit finding(s) without dedicated Action Cards:")
@@ -960,7 +957,18 @@ def verify_patch_applied_on_disk(task: Dict[str, Any], workspace_root: Path) -> 
             return False, f"Error reading target file {rel_path}: {e}"
 
     if not search_code or not repl_code:
-        return True, ""
+        try:
+            content = full_path.read_text(encoding="utf-8", errors="replace")
+            if not content.strip():
+                return False, f"Target file '{rel_path}' is empty on disk."
+            if repl_code:
+                disk_line_set = {ln.strip() for ln in content.splitlines() if ln.strip()}
+                repl_only = [ln.strip() for ln in repl_code.splitlines() if ln.strip()]
+                if repl_only and not all(r in disk_line_set for r in repl_only):
+                    return False, f"Target file '{rel_path}' does not contain the expected REPLACE block lines."
+            return True, ""
+        except Exception as e:
+            return False, f"Error reading target file {rel_path}: {e}"
 
     try:
         content = full_path.read_text(encoding="utf-8", errors="replace")
@@ -993,8 +1001,13 @@ def verify_patch_applied_on_disk(task: Dict[str, Any], workspace_root: Path) -> 
                     if all(disk_lines[idx + j] == repl_lines[j] for j in range(len(repl_lines))):
                         found_repl = True
                         break
-            if not found_repl and not any(r in disk_lines for r in repl_lines):
-                return False, f"Target file '{rel_path}' does not contain the expected REPLACE block lines."
+            if not found_repl:
+                search_set = set(search_lines)
+                novel_repl = [r for r in repl_lines if r not in search_set]
+                disk_line_set = set(disk_lines)
+                check_targets = novel_repl if novel_repl else repl_lines
+                if not check_targets or not all(r in disk_line_set for r in check_targets):
+                    return False, f"Target file '{rel_path}' does not contain the expected REPLACE block lines."
 
         # 2. Check for consecutive patch-boundary line/block stutters (k=1..5 lines with identical indentation)
         repl_set = set(repl_lines)
@@ -1216,14 +1229,13 @@ def cmd_next(run_verify: bool = False, target_track: Optional[str] = None) -> in
 
     atomic_write_text(queue_path, json.dumps(queue_data, indent=2))
     sync_orion_infrastructure(ws, queue_data.get("source_file", ""), tasks, next_idx)
-    done_md = (
-        "# 🏁 ALL ORION BENTO TASKS COMPLETED\n\n"
-        f"All {len(tasks)} atomic tasks from `{queue_data.get('source_file')}` have been applied and verified (`Exit Code 0`).\n"
-        "- `.orion/working/execution_state.json`: `DONE`\n"
-        "- `.orion/working/audit/00-ledger.md`: All items marked `[FIXED]`\n"
-    )
-    atomic_write_text(active_path, done_md)
-    print(f"🏁 [ORION BENTO COMPLETE] All {len(tasks)}/{len(tasks)} tasks verified and marked [FIXED] in 00-ledger.md!")
+    for finished_file in (active_path, queue_path):
+        if finished_file.is_file():
+            try:
+                finished_file.unlink()
+            except OSError:
+                pass
+    print(f"🏁 [ORION BENTO COMPLETE] All {len(tasks)}/{len(tasks)} tasks verified! Ephemeral task queue cleared.")
     return 0
 
 
@@ -1323,9 +1335,20 @@ def cmd_auto_solve(target_track: Optional[str] = None, all_lane1: bool = False) 
     print(f"[AUTO-SOLVE] Applying Second-Worker patch for Task {task['task_id']} on `{rel_path}`...")
     try:
         content = full_path.read_text(encoding="utf-8", errors="replace")
-        search_str = task["search_code"].strip()
-        if search_str in content:
-            new_content = content.replace(search_str, repl_code.strip(), 1)
+        raw_search = task["search_code"]
+        search_str = raw_search.strip()
+        if raw_search in content:
+            aligned_repl = _align_replacement_indentation(raw_search, raw_search, repl_code)
+            new_content = content.replace(raw_search, aligned_repl, 1)
+            full_path.write_text(new_content, encoding="utf-8")
+        elif search_str in content:
+            idx = content.find(search_str)
+            line_start = content.rfind("\n", 0, idx) + 1
+            leading_ws = content[line_start:idx]
+            indented_search = (leading_ws if leading_ws.isspace() else "") + search_str
+            aligned_repl = _align_replacement_indentation(indented_search, raw_search, repl_code)
+            target_span = indented_search if indented_search in content else search_str
+            new_content = content.replace(target_span, aligned_repl, 1)
             full_path.write_text(new_content, encoding="utf-8")
         else:
             print(f"[AUTO-SOLVE] SEARCH block not found on disk for task {task['task_id']}. Rollback.")
@@ -1346,10 +1369,20 @@ def cmd_auto_solve(target_track: Optional[str] = None, all_lane1: bool = False) 
     retcode, stdout, stderr = _run_verification_command(v_cmd, ws)
 
     if retcode == 0:
+        _log_telemetry(None, f"auto_solve:pass:{task['task_id']}:{rel_path}")
         print(f"🎉 [AUTO-SOLVE SUCCESS] Task {task['task_id']} auto-solved and verified (Exit Code 0)!")
         return cmd_next(run_verify=False, target_track=target_track)
 
     full_path.write_bytes(byte_snapshot)
+    err_excerpt = (stderr or stdout or f"Exit Code {retcode}").strip()
+    task.setdefault("failed_attempts", []).append({
+        "timestamp": datetime.now().isoformat(),
+        "command": v_cmd,
+        "exit_code": retcode,
+        "error_excerpt": err_excerpt[:500],
+    })
+    atomic_write_text(queue_path, json.dumps(queue_data, indent=2))
+    _log_telemetry(RuntimeError(f"Exit {retcode}"), f"auto_solve:rollback:{task['task_id']}:{rel_path}")
     print(f"[AUTO-SOLVE ROLLBACK] Verification command failed (Exit Code {retcode}). Byte snapshot restored cleanly.")
     return retcode or 1
 

@@ -1101,6 +1101,7 @@ def main():
                     "title": _bt.get("title"),
                     "target_file": _bt.get("target_file"),
                     "lines": f"L{_bt.get('start_line')}-L{_bt.get('end_line')}",
+                    "execution_lane": _bt.get("execution_lane", "LANE-2: MAIN-WORKER BUDGET [High Effort]"),
                     "instruction": f"Read .orion/working/ACTIVE_TASK.md and execute ONLY Task {_bt.get('task_id')}.",
                 }
         except Exception as _bqe:
@@ -1261,16 +1262,37 @@ def main():
         except Exception:
             pass
 
+        # Stateless IDE Tab Resume: derive live state directly from Git working tree + recent commit
+        try:
+            git_st = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=WORKSPACE_DIR, capture_output=True, text=True, encoding="utf-8", timeout=1.5, creationflags=_WINDOWLESS_FLAGS
+            )
+            if git_st.returncode == 0 and git_st.stdout.strip():
+                dirty_lines = [ln.strip() for ln in git_st.stdout.splitlines() if ln.strip()]
+                dirty_files = [ln[3:].strip().strip('"') for ln in dirty_lines[:5]]
+                cold_start_lines.append(
+                    f"📌 LIVE REPO STATE (Stateless Tab Resume): {len(dirty_lines)} uncommitted file(s) active "
+                    f"({', '.join(dirty_files)}). Inspect `git diff` to continue seamlessly without session handoff ceremony."
+                )
+        except Exception:
+            pass
+
         handoff_path = os.path.join(CONTEXT_DIR, "handoff.md")
         if os.path.exists(handoff_path):
             try:
                 with open(handoff_path, "r", encoding="utf-8") as hf:
                     h_text = hf.read()
                 m = re.search(r'## 1\. Resume Point\s*\n(.*?)(?=\n## |\Z)', h_text, re.DOTALL)
-                if m:
-                    res_point = m.group(1).strip()
-                    if res_point and not res_point.startswith("["):
-                        cold_start_lines.append(f"📌 RESUME POINT (.orion/working/handoff.md):\n{res_point[:300]}")
+                res_point = m.group(1).strip() if m else ""
+                h_age_hr = (time.time() - os.path.getmtime(handoff_path)) / 3600.0
+                if res_point and not res_point.startswith("[") and h_age_hr <= 12.0:
+                    cold_start_lines.append(f"📌 RESUME POINT (.orion/working/handoff.md):\n{res_point[:300]}")
+                elif not res_point or res_point.startswith("["):
+                    try:
+                        os.remove(handoff_path)
+                    except OSError:
+                        pass
             except Exception:
                 pass
 

@@ -376,13 +376,17 @@ class OrionGraphStore:
         adj: Dict[int, Dict[int, float]] = {i: defaultdict(float) for i in range(N)}
         total_weight_accum = 0.0
 
+        hub_suffixes = ("agents_index.md", "rules_index.md", "scripts.md")
         for r in relation_rows:
             u_name = r["subject_id"]
             v_name = r["object_id"]
+            pred_low = (r["predicate"] or "").lower()
             if u_name in node_to_idx and v_name in node_to_idx:
                 u = node_to_idx[u_name]
                 v = node_to_idx[v_name]
                 w = float(r["weight"])
+                if pred_low in ("indexes", "mentions") or u_name.lower().endswith(hub_suffixes) or v_name.lower().endswith(hub_suffixes):
+                    w *= 0.15
                 if u != v:
                     adj[u][v] += w
                     adj[v][u] += w
@@ -921,13 +925,21 @@ class OrionGraphStore:
             discovered_nodes.add(r["subject_id"])
             discovered_nodes.add(r["object_id"])
 
-        # Fetch 2-hop boundary edges
+        # Fetch 2-hop boundary edges with SQL-level hub & structural predicate damping
         hop2_placeholders = ",".join("?" for _ in discovered_nodes)
         cur.execute(f"""
             SELECT subject_id, predicate, object_id, weight, source_path
             FROM relations
-            WHERE subject_id IN ({hop2_placeholders}) OR object_id IN ({hop2_placeholders})
-            ORDER BY weight DESC
+            WHERE (subject_id IN ({hop2_placeholders}) OR object_id IN ({hop2_placeholders}))
+              AND lower(predicate) != 'has_section'
+            ORDER BY (
+                weight * CASE
+                    WHEN lower(predicate) IN ('indexes', 'mentions') THEN 0.15
+                    WHEN lower(subject_id) LIKE '%agents_index.md' OR lower(object_id) LIKE '%agents_index.md' THEN 0.15
+                    WHEN lower(subject_id) LIKE '%rules_index.md' OR lower(object_id) LIKE '%rules_index.md' THEN 0.15
+                    ELSE 1.0
+                END
+            ) DESC
             LIMIT ?
         """, list(discovered_nodes) + list(discovered_nodes) + [max_subgraph_edges])
         all_edge_rows = cur.fetchall()
@@ -940,7 +952,8 @@ class OrionGraphStore:
             "governed_by", "implements", "enforces", "imports", "calls",
             "depends_on", "supersedes", "routes_to", "executes", "inherits"
         }
-        STRUCT_PREDICATES = {"has_section", "mentions"}
+        STRUCT_PREDICATES = {"has_section", "mentions", "indexes"}
+        INDEX_HUB_SUFFIXES = ("agents_index.md", "rules_index.md", "scripts.md")
 
         adj: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
         nodes: Set[str] = set()
@@ -952,15 +965,17 @@ class OrionGraphStore:
             if pred in ARCH_PREDICATES:
                 edge_w = w * 1.5
             elif pred in STRUCT_PREDICATES:
-                edge_w = w * 0.25
+                edge_w = w * 0.15
             else:
                 edge_w = w * 1.0
+
+            if u.lower().endswith(INDEX_HUB_SUFFIXES) or v.lower().endswith(INDEX_HUB_SUFFIXES):
+                edge_w *= 0.15
 
             adj[u][v] += edge_w
             adj[v][u] += edge_w * 0.5
             nodes.add(u)
             nodes.add(v)
-
         if not nodes:
             return []
 

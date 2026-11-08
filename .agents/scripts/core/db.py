@@ -40,6 +40,8 @@ def log_telemetry(
     state_snapshot: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Centralized non-fatal telemetry logger & Self-Evolve Auto-Catch Sink."""
+    if os.environ.get("ORION_STRICT_CONTRACTS") == "1" and isinstance(err, (TypeError, ValueError, AttributeError, KeyError)):
+        raise err
     if os.environ.get("ORION_DEBUG"):
         msg = f": {err}" if err else ""
         try:
@@ -49,7 +51,6 @@ def log_telemetry(
 
     if err is None and not context:
         return
-
     try:
         from core.paths import get_orion_dir
         orion_dir = str(get_orion_dir())

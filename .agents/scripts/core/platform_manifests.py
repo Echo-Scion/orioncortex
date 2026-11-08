@@ -6,8 +6,6 @@ Enables one-command deployment to all supported agent platforms.
 
 import json
 import os
-import shutil
-from pathlib import Path
 
 PLATFORM_SPECS = {
     "antigravity": {
@@ -15,7 +13,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.1",
+            "version": "0.1.2",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -25,7 +23,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.1",
+            "version": "0.1.2",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -35,7 +33,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.1",
+            "version": "0.1.2",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -45,7 +43,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.1",
+            "version": "0.1.2",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -55,7 +53,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.1",
+            "version": "0.1.2",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -65,7 +63,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.1",
+            "version": "0.1.2",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -75,7 +73,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.1",
+            "version": "0.1.2",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "contextFileName": "AGENTS.md"
         }
@@ -85,7 +83,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.1",
+            "version": "0.1.2",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "contextFileName": "AGENTS.md"
         }
@@ -95,7 +93,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.1",
+            "version": "0.1.2",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "instructions": ".github/copilot-instructions.md"
         }
@@ -105,7 +103,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.1",
+            "version": "0.1.2",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -115,7 +113,7 @@ PLATFORM_SPECS = {
         "format": "raw",
         "content": (
             "name: orioncortex\n"
-            "version: 0.1.1\n"
+            "version: 0.1.2\n"
             "description: Turnkey Auto-Vibe Coding Brain Ecosystem\n"
             "skills_dir: .agents/skills\n"
         )
@@ -125,7 +123,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.1",
+            "version": "0.1.2",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -135,7 +133,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.1",
+            "version": "0.1.2",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -145,7 +143,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.1",
+            "version": "0.1.2",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -161,7 +159,7 @@ PLATFORM_SPECS = {
             "2. Verify 10-Role Swarm routing via `python .agents/scripts/orion.py worker status`.\n"
             "3. Dispatch specialized roles directly: `python .agents/scripts/orion.py worker dispatch --role <role> --prompt \"<task>\"`.\n"
             "4. Execute automated multi-role pipelines: `python .agents/scripts/orion.py worker auto \"<goal>\"`.\n"
-            "5. Run stateless 5-Lens Swarm reviews: `python .agents/scripts/orion.py worker goldfish --spec implementation_plan.md`.\n"
+            "5. Run stateless 5-Lens Swarm reviews: `python .agents/scripts/orion.py worker review --spec implementation_plan.md`.\n"
         )
     },
     "pi": {
@@ -169,7 +167,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.1",
+            "version": "0.1.2",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -179,7 +177,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.1",
+            "version": "0.1.2",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -189,7 +187,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.1",
+            "version": "0.1.2",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -199,7 +197,7 @@ PLATFORM_SPECS = {
         "format": "json",
         "data": {
             "name": "orioncortex",
-            "version": "0.1.1",
+            "version": "0.1.2",
             "description": "Turnkey Auto-Vibe Coding Brain Ecosystem",
             "skills": ".agents/skills"
         }
@@ -207,28 +205,13 @@ PLATFORM_SPECS = {
 }
 
 
-def is_flutterin_installed(target_root: str = "") -> bool:
-    """5-Tier discovery check for flutterin suite across target workspace, sibling dir, plugin dir, or PATH."""
-    if target_root:
-        root_path = Path(target_root).resolve()
-        if (root_path / "src" / "mcp" / "index.ts").is_file() or (root_path / ".flutterin").exists():
-            return True
-        sibling = root_path.parent / "flutterin" / "dist" / "mcp" / "index.js"
-        if sibling.is_file():
-            return True
-    home_plugin = Path.home() / ".gemini" / "config" / "plugins" / "flutterin"
-    if home_plugin.exists():
-        return True
-    return shutil.which("flutterin") is not None
-
-
 def deploy_platform_manifest(
     target_root: str,
     platform_key: str,
     dry_run: bool = False,
-    include_flutterin: bool | None = None,
+    mcp_servers: dict | None = None,
 ) -> str | None:
-    """Deploy a single platform plugin manifest to target_root."""
+    """Deploy a single platform plugin manifest to target_root while preserving registered MCP servers."""
     spec = PLATFORM_SPECS.get(platform_key)
     if not spec:
         return None
@@ -241,13 +224,19 @@ def deploy_platform_manifest(
 
     if spec["format"] == "json":
         data = dict(spec["data"])
-        if include_flutterin is True:
-            data["mcpServers"] = {
-                "flutterin": {
-                    "command": "flutterin",
-                    "args": ["mcp"],
-                }
-            }
+        existing_mcp = {}
+        if os.path.exists(target_path):
+            try:
+                with open(target_path, "r", encoding="utf-8") as ef:
+                    prev = json.load(ef)
+                if isinstance(prev, dict) and isinstance(prev.get("mcpServers"), dict):
+                    existing_mcp.update(prev["mcpServers"])
+            except Exception:
+                pass
+        if isinstance(mcp_servers, dict):
+            existing_mcp.update(mcp_servers)
+        if existing_mcp:
+            data["mcpServers"] = existing_mcp
         with open(target_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
             f.write("\n")
@@ -261,7 +250,7 @@ def deploy_platform_manifest(
 def deploy_all_platform_manifests(
     target_root: str,
     dry_run: bool = False,
-    include_flutterin: bool | None = None,
+    mcp_servers: dict | None = None,
 ) -> list[str]:
     """Deploy all platform manifests into target_root."""
     created = []
@@ -270,7 +259,7 @@ def deploy_all_platform_manifests(
             target_root,
             platform_key,
             dry_run=dry_run,
-            include_flutterin=include_flutterin,
+            mcp_servers=mcp_servers,
         )
         if p and p not in created:
             created.append(p)

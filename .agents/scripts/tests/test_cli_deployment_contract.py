@@ -74,6 +74,10 @@ class CliDeploymentContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("Usage: python rag.py", result.stdout)
 
+        via_orion = run_script(ORION, "rag", "--help")
+        self.assertEqual(via_orion.returncode, 0)
+        self.assertIn("Usage: python rag.py", via_orion.stdout)
+
     def test_vault_command_is_reachable(self):
         vault = SCRIPTS_DIR / "commands" / "observatory.py"
         result = run_script(vault, "--help")

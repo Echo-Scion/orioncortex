@@ -112,9 +112,9 @@ class RAGDiagnosticJudge:
         self, query: str, chunks: List[str], generated_answer: str = ""
     ) -> Dict[str, float]:
         """Calculates query-context relevance and answer-context faithfulness."""
-        query_words = set(query.lower().split())
+        query_words = set(re.findall(r"\b[a-z0-9_]+\b", query.lower()))
         chunk_text = " ".join(chunks).lower()
-        chunk_words = set(chunk_text.split())
+        chunk_words = set(re.findall(r"\b[a-z0-9_]+\b", chunk_text))
 
         # Relevance: Semantic embedding similarity via Ollama if available, otherwise lexical token overlap
         semantic_relevance = None
@@ -140,7 +140,7 @@ class RAGDiagnosticJudge:
 
         # Faithfulness: fraction of answer tokens grounded in retrieved chunks
         if generated_answer:
-            answer_words = set(generated_answer.lower().split())
+            answer_words = set(re.findall(r"\b[a-z0-9_]+\b", generated_answer.lower()))
             answer_overlap = len(answer_words.intersection(chunk_words))
             faithfulness = answer_overlap / max(len(answer_words), 1)
         else:
@@ -349,7 +349,16 @@ def sync(intent: str, delta: bool = False) -> None:
 
     if query_str and query_str in cache_data and not delta:
         print(f"  [CACHE HIT] Loaded semantic routes for '{query_str}' from RAM cache.")
-        rules = cache_data[query_str]
+        cached_entry = cache_data[query_str]
+        if isinstance(cached_entry, dict):
+            rules = cached_entry.get("rules", [])
+            hop_triplets = [tuple(t) for t in cached_entry.get("hop_triplets", []) if len(t) == 3]
+            neighbor_files = [
+                os.path.join(workspace_dir, np) if not os.path.isabs(np) else np
+                for np in cached_entry.get("neighbor_files", [])
+            ]
+        else:
+            rules = cached_entry
     elif not delta:
         # Generate Intent Embedding
         query_embedding = None
@@ -502,7 +511,11 @@ def sync(intent: str, delta: bool = False) -> None:
                             _log_telemetry(_e, f"rag.py:retrieval:{path}")
                     try:
                         with RAGDiagnosticJudge(db_path) as judge:
-                            judge.evaluate_retrieval(intent, retrieval_chunks)
+                            judge.evaluate_retrieval(
+                                intent,
+                                retrieval_chunks,
+                                generated_answer="",
+                            )
                     except Exception as _re:
                         _log_telemetry(_re, "rag.py:evaluate_retrieval")
 
@@ -554,24 +567,23 @@ def sync(intent: str, delta: bool = False) -> None:
                                     SELECT subject_id, predicate, object_id, weight
                                     FROM relations
                                     WHERE (subject_id = ? OR subject_id = ? OR subject_id LIKE ? OR source_path = ?)
-                                      AND lower(predicate) != 'has_section'
+                                      AND lower(predicate) NOT IN ('has_section', 'indexes')
                                     ORDER BY weight DESC LIMIT 6
                                 ''', (seed_path, seed_clean, seed_like, seed_path))
                                 for src, rel, tgt, conf in c.fetchall():
-                                    hop_triplets.append((os.path.basename(src), rel, tgt))
+                                    hop_triplets.append((src, rel, tgt))
                                     _resolve_neighbor_target(c, tgt, workspace_dir, neighbor_files)
 
                                 c.execute('''
                                     SELECT subject_id, predicate, object_id, weight
                                     FROM relations
                                     WHERE (object_id = ? OR object_id = ? OR object_id = ? OR object_id LIKE ?)
-                                      AND lower(predicate) != 'has_section'
+                                      AND lower(predicate) NOT IN ('has_section', 'indexes')
                                     ORDER BY weight DESC LIMIT 6
                                 ''', (seed_path, seed_clean, seed_stem, seed_like))
                                 for src, rel, tgt, conf in c.fetchall():
-                                    hop_triplets.append((os.path.basename(src), rel, os.path.basename(tgt)))
+                                    hop_triplets.append((src, rel, tgt))
                                     _resolve_neighbor_target(c, src, workspace_dir, neighbor_files)
-
                                 c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='entities'")
                                 if c.fetchone():
                                     c.execute('''
@@ -661,7 +673,23 @@ def sync(intent: str, delta: bool = False) -> None:
                         except Exception as _ste:
                             _log_telemetry(_ste, "rag:skill_telemetry")
 
-                cache_data[query_str] = rules
+                rel_rules = [
+                    os.path.relpath(r, workspace_dir).replace("\\", "/")
+                    if os.path.isabs(r) and r.startswith(workspace_dir)
+                    else r.replace("\\", "/")
+                    for r in rules
+                ]
+                rel_neighbors = [
+                    os.path.relpath(n, workspace_dir).replace("\\", "/")
+                    if os.path.isabs(n) and n.startswith(workspace_dir)
+                    else n.replace("\\", "/")
+                    for n in neighbor_files
+                ]
+                cache_data[query_str] = {
+                    "rules": rel_rules,
+                    "hop_triplets": [list(t) for t in hop_triplets],
+                    "neighbor_files": rel_neighbors,
+                }
                 if len(cache_data) > 50:
                     keys = list(cache_data.keys())
                     for k in keys[:-50]:
@@ -827,45 +855,30 @@ def sync(intent: str, delta: bool = False) -> None:
     else:
         print("\n## [NanoBrain] [WARNING] NanoBrain LLM features disabled — (Status OFF or EMBED)")
 
-    # --- Working Memory (Holographic Handoff) ---
+    # --- Working Memory (Stateless Repo Resume & Non-Empty Handoff) ---
     handoff_path = os.path.join(orion_dir, "working", "handoff.md")
     if os.path.exists(handoff_path):
-        print("\n## Working Memory (Session Handoff)")
         try:
             with open(handoff_path, "r", encoding="utf-8") as f:
                 handoff_content = f.read()
-            print("  [ACTIVE HANDOFF DETECTED]:")
-            for line in handoff_content.splitlines():
-                print(f"    {line}")
-
-            episodic_dir = os.path.join(orion_dir, "episodic")
-            if not os.path.exists(episodic_dir):
-                os.makedirs(episodic_dir)
-
+            body_lines = [
+                ln.strip() for ln in handoff_content.splitlines()
+                if ln.strip() and not ln.strip().startswith(("#", "<!--", "["))
+            ]
             mtime = os.path.getmtime(handoff_path)
             age_hours = (time.time() - mtime) / 3600
-
-            archive_marker = os.path.join(episodic_dir, ".last_archived_mtime")
-            last_mtime = 0
-            if os.path.exists(archive_marker):
+            if len(" ".join(body_lines)) >= 15 and age_hours <= 12:
+                print("\n## Working Memory (Session Handoff)")
+                print("  [ACTIVE HANDOFF DETECTED]:")
+                for line in handoff_content.splitlines():
+                    print(f"    {line}")
+            elif len(" ".join(body_lines)) < 15:
                 try:
-                    with open(archive_marker, "r", encoding="utf-8") as mf:
-                        last_mtime = float(mf.read().strip())
-                except Exception as _e:
-                    _log_telemetry(_e, 'rag.py:archive_marker')
-
-            if mtime > last_mtime:
-                stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                if age_hours > 48:
-                    print(f"  [WARNING] Handoff is {age_hours:.0f}h old. May be stale. Archiving with STALE prefix.")
-                    shutil.copy2(handoff_path, os.path.join(episodic_dir, f"STALE_handoff_{stamp}.md"))
-                else:
-                    shutil.copy2(handoff_path, os.path.join(episodic_dir, f"handoff_{stamp}.md"))
-                    print("  [INFO] Handoff backed up to episodic memory.")
-
-                atomic_write_text(archive_marker, str(mtime))
+                    os.remove(handoff_path)
+                except OSError:
+                    pass
         except Exception as e:
-            print(f"  [ERROR] Failed to process working memory: {e}")
+            _log_telemetry(e, "rag.py:working_memory")
 
     try:
         from core.memory import MultiLayerMemoryManager
@@ -959,8 +972,11 @@ def filter_overlapping_active_context(candidate_paths: List[str], workspace_dir:
     try:
         with open(context_file, "r", encoding="utf-8") as f:
             ctx = json.load(f)
-        active_file = ctx.get("active_file", "")
-        bento_file = ctx.get("active_bento_task", {}).get("target_file", "")
+        if not isinstance(ctx, dict):
+            return candidate_paths
+        active_file = ctx.get("active_file") or ""
+        bento_task = ctx.get("active_bento_task")
+        bento_file = bento_task.get("target_file", "") if isinstance(bento_task, dict) else ""
         excluded = set()
         for fpath in (active_file, bento_file):
             if fpath:
@@ -1036,11 +1052,11 @@ def rag_main(argv=None) -> int:
     if argv is None:
         argv = sys.argv[1:]
     if not argv or argv[0] in ("-h", "--help", "help"):
-        print("Usage: python rag.py <sync|diagnostics|page|recall> [args...]")
+        print("Usage: python rag.py <sync|query|diagnostics|page|recall> [args...]")
         return 0
     cmd = argv[0]
     sub_args = argv[1:]
-    if cmd in ("sync", "retrieve"):
+    if cmd in ("sync", "retrieve", "query"):
         intent = " ".join(sub_args) if sub_args else "default intent"
         sync(intent)
         return 0
